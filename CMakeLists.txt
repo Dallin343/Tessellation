@@ -11,6 +11,9 @@ include_directories(
 )
 include_directories(Vendor/glfw)
 
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(Vendor/assimp)
+
 add_library(GLAD STATIC Vendor/glad/src/glad.c Vendor/glad/include/glad/glad.h)
 
 find_package(OpenGL REQUIRED)
