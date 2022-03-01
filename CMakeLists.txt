@@ -7,9 +7,9 @@ include_directories(
         Vendor/glfw/include
         Vendor/glad/include
         Vendor/glm
+        Vendor/libigl/include
         Source
 )
-include_directories(Vendor/glfw)
 
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(Vendor/assimp)
@@ -29,6 +29,6 @@ add_subdirectory(Vendor/glfw)
 
 add_executable(Tessellation
         Source/main.cpp
-)
+        Source/Mesh.cpp Source/Mesh.h Source/Model.cpp Source/Model.h Source/Shader.h)
 
-target_link_libraries(Tessellation PRIVATE glfw OpenGL::GL GLAD glm::glm)
+target_link_libraries(Tessellation PRIVATE glfw OpenGL::GL GLAD glm::glm assimp)
