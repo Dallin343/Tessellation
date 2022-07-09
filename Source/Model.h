@@ -31,6 +31,11 @@ class Model
             loadModel(path);
         }
         void Draw(Shader &shader);
+
+        const std::vector<Mesh>& GetMeshes() {
+            return this->meshes;
+        }
+
     private:
         // model data
         std::vector<Mesh> meshes;

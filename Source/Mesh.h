@@ -10,30 +10,31 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Shader.h"
+#include "Primitives.h"
 
 #include <string>
 #include <vector>
 
-struct Vertex {
-    // position
-    glm::vec3 Position;
-    // normal
-    glm::vec3 Normal;
-};
 
 class Mesh {
 public:
     // mesh data
-    std::vector<Vertex>       vertices;
-    std::vector<unsigned int> indices;
-
-    Mesh(std::vector<Vertex> vertices, std::vector<unsigned int> indices);
+    Mesh(VBuf vertices, std::vector<unsigned int> indices, EBuf edges, FBuf faces);
     void Draw(Shader &shader);
+
+    const VBuf &GetVertices() const;
+
+    void ToGraph();
 private:
     //  render data
     unsigned int VAO, VBO, EBO;
 
     void setupMesh();
+
+    std::vector<unsigned int> indices;
+    VBuf vertices;
+    EBuf edges;
+    FBuf faces;
 };
 
 

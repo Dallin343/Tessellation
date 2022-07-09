@@ -29,6 +29,15 @@ add_subdirectory(Vendor/glfw)
 
 add_executable(Tessellation
         Source/main.cpp
-        Source/Mesh.cpp Source/Mesh.h Source/Model.cpp Source/Model.h Source/Shader.h)
+        Source/Mesh.cpp
+        Source/Mesh.h
+        Source/Model.cpp
+        Source/Model.h
+        Source/Shader.h
+        Source/Camera.h
+        Source/MeshProcessor.cpp
+        Source/MeshProcessor.h
+        Source/Primitives.h
+        Source/Primitives.cpp)
 
 target_link_libraries(Tessellation PRIVATE glfw OpenGL::GL GLAD glm::glm assimp)

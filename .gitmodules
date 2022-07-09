@@ -1,0 +1,6 @@
+[submodule "Vendor/assimp"]
+	path = Vendor/assimp
+	url = https://github.com/assimp/assimp.git
+[submodule "Vendor/libigl"]
+	path = Vendor/libigl
+	url = https://github.com/libigl/libigl.git
