@@ -40,13 +40,13 @@ void Model::processNode(aiNode *node, const aiScene *scene)
 
 }
 
-Mesh Model::processMesh(aiMesh *mesh, const aiScene *scene)
+std::shared_ptr<Mesh> Model::processMesh(aiMesh *mesh, const aiScene *scene)
 {
     // data to fill
     std::vector<unsigned int> indices;
-    std::vector<VPtr> vertices;
-    std::vector<EPtr> edges;
-    std::vector<FPtr> faces;
+    std::vector<VertexPtr> vertices;
+    std::vector<EdgePtr> edges;
+    std::vector<FacePtr> faces;
 
     // walk through each of the mesh's vertices
     for(unsigned int i = 0; i < mesh->mNumVertices; i++)
@@ -84,12 +84,17 @@ Mesh Model::processMesh(aiMesh *mesh, const aiScene *scene)
             indices.push_back(i2);
 
             // Create Edge pointers
-            auto edgeA = std::make_shared<Edge>(i0, i1);
-            auto edgeB = std::make_shared<Edge>(i1, i2);
-            auto edgeC = std::make_shared<Edge>(i2, i0);
+            auto edgeA = std::make_shared<Edge>(vertices.at(i0), vertices.at(i1));
+            auto edgeB = std::make_shared<Edge>(vertices.at(i1), vertices.at(i2));
+            auto edgeC = std::make_shared<Edge>(vertices.at(i2), vertices.at(i0));
+
+            edges.push_back(edgeA);
+            edges.push_back(edgeB);
+            edges.push_back(edgeC);
 
             // Create Face with refs to edges
             auto face = std::make_shared<Face>(edgeA, edgeB, edgeC);
+            faces.push_back(face);
 
             // Add Face ref to edges
             edgeA->AddFace(face);
@@ -99,19 +104,24 @@ Mesh Model::processMesh(aiMesh *mesh, const aiScene *scene)
             // Add edges to vertices
             vertices.at(i0)->AddEdge(edgeA);
             vertices.at(i0)->AddEdge(edgeC);
+            vertices.at(i0)->AddFace(face);
+
             vertices.at(i1)->AddEdge(edgeA);
             vertices.at(i1)->AddEdge(edgeB);
+            vertices.at(i1)->AddFace(face);
+
             vertices.at(i2)->AddEdge(edgeA);
             vertices.at(i2)->AddEdge(edgeC);
+            vertices.at(i2)->AddFace(face);
         }
 
     }
 
     // return a mesh object created from the extracted mesh data
-    return {vertices, indices, edges, faces};
+    return std::make_shared<Mesh>(vertices, indices, edges, faces);
 }
 
 void Model::Draw(Shader &shader) {
     for(auto & mesh : meshes)
-        mesh.Draw(shader);
+        mesh->Draw(shader);
 }

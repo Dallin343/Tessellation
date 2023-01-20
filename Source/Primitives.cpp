@@ -5,19 +5,19 @@
 #include <glm/geometric.hpp>
 #include "Primitives.h"
 
-Edge::Edge(VPtr& a, VPtr& b) {
+Edge::Edge(VertexPtr& a, VertexPtr& b) {
 vertices = {a, b};
 }
 
-const std::vector<FPtr>& Edge::GetFaces() const {
+const std::vector<FacePtr>& Edge::GetFaces() const {
     return this->faces;
 }
 
-void Edge::AddFace(FPtr& face) {
+void Edge::AddFace(FacePtr& face) {
     this->faces.push_back(face);
 }
 
-const std::array<VPtr, 2> &Edge::GetVertices() const {
+const std::array<VertexPtr, 2> &Edge::GetVertices() const {
     return vertices;
 }
 
@@ -25,7 +25,7 @@ glm::dvec3 Edge::GetVector() {
     return vertices[1]->GetPosition() - vertices[0]->GetPosition();
 }
 
-Face::Face(EPtr& e1, EPtr& e2, EPtr& e3) {
+Face::Face(EdgePtr& e1, EdgePtr& e2, EdgePtr& e3) {
     this->edges = {e1, e2, e3};
 
     // Calculate face normal
@@ -37,7 +37,7 @@ Face::Face(EPtr& e1, EPtr& e2, EPtr& e3) {
     this->plane = glm::dvec4(this->normal, glm::dot(this->normal, vertex->GetPosition()));
 }
 
-const std::array<EPtr, 3> &Face::GetEdges() const {
+const std::array<EdgePtr, 3> &Face::GetEdges() const {
     return edges;
 }
 
@@ -45,11 +45,11 @@ const glm::dvec4& Face::GetPlane() const {
     return plane;
 }
 
-const std::vector<EPtr>& Vertex::GetEdges() const {
+const std::vector<EdgePtr>& Vertex::GetEdges() const {
     return edges;
 }
 
-void Vertex::AddEdge(EPtr& edge) {
+void Vertex::AddEdge(EdgePtr& edge) {
     this->edges.push_back(edge);
 }
 
@@ -79,4 +79,41 @@ unsigned int Vertex::GetID() const {
 
 void Vertex::SetID(unsigned int id) {
     ID = id;
+}
+
+const std::vector<FacePtr> &Vertex::GetFaces() const {
+    return faces;
+}
+
+void Vertex::AddFace(FacePtr &face) {
+    this->faces.push_back(face);
+}
+
+double Pair::GetCost() const {
+    return cost;
+}
+
+void Pair::SetCost(double cost) {
+    this->cost = cost;
+}
+
+Pair::Pair(VertexPtr &a, VertexPtr &b, glm::dvec3 candidate) {
+    vertices = {a,b};
+    this->candidate = candidate;
+}
+
+Pair::Pair(const VertexPtr &a, const VertexPtr &b) {
+    vertices = {a,b};
+}
+
+const std::array<VertexPtr, 2> &Pair::GetVertices() const {
+    return vertices;
+}
+
+const glm::dvec3 &Pair::GetCandidate() const {
+    return candidate;
+}
+
+void Pair::SetCandidate(const glm::dvec3 &candidate) {
+    this->candidate = candidate;
 }

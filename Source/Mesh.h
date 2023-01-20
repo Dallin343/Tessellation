@@ -24,6 +24,10 @@ public:
 
     const VBuf &GetVertices() const;
 
+    const EBuf &GetEdges() const;
+
+    const FBuf &GetFaces() const;
+
     void ToGraph();
 private:
     //  render data

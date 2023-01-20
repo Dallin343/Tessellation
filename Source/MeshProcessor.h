@@ -6,6 +6,8 @@
 #define TESSELLATION_MESHPROCESSOR_H
 
 #include "Model.h"
+#include <queue>
+#include <optional>
 
 /**
  * Simplification Algorithm
@@ -22,16 +24,39 @@
     contract this pair, and update the costs of all valid pairs involving v1.
  */
 
-class MeshProcessor {
+class Comparator {
+    bool Reverse;
+public:
+    Comparator(const bool& reverse = false){
+        Reverse=reverse;
+    }
+    bool operator() (const PairPtr& a, const PairPtr& b) const {
+        if (Reverse) return (a->GetCost() > b->GetCost());
+        else return (a->GetCost() < b->GetCost());
+    }
+};
 
-    void DecimateInit(Mesh *hdMesh);
+class MeshProcessor {
+public:
+
+    void DecimateInit(std::shared_ptr<Mesh> hdMesh);
 
 private:
-//
-//    double quadricError(vertices)
-    Mesh *mesh;
+    const double threshold = 0.0;
 
-    glm::dmat4 ComputeQ(const VPtr& vertex);
+    std::priority_queue<PairPtr, std::vector<PairPtr>, Comparator> pairHeap;
+
+    std::shared_ptr<Mesh> mesh;
+    std::vector<PairPtr> validPairs;
+
+    glm::dmat4 ComputeQ(const VertexPtr& vertex);
+    void SelectPairs();
+    void ComputeTarget(PairPtr &pair);
+
+    static double VertexError(const glm::dvec3& v, const glm::dmat4& Q);
+    std::optional<glm::dvec3> FindOptimal(const glm::dmat4&);
+    std::optional<glm::dvec3> FitLine(const glm::dmat4 &Q, const glm::dvec3 &v1, const glm::dvec3 &v2);
+    std::optional<glm::dvec3> FitLocal(const glm::dmat4 &Q, const glm::dvec3 &v1, const glm::dvec3 &v2);
 };
 
 

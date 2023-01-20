@@ -32,18 +32,18 @@ class Model
         }
         void Draw(Shader &shader);
 
-        const std::vector<Mesh>& GetMeshes() {
+        const std::vector<std::shared_ptr<Mesh>>& GetMeshes() {
             return this->meshes;
         }
 
     private:
         // model data
-        std::vector<Mesh> meshes;
+        std::vector<std::shared_ptr<Mesh>> meshes;
         std::string directory;
 
         void loadModel(const std::string& path);
         void processNode(aiNode *node, const aiScene *scene);
-        Mesh processMesh(aiMesh *mesh, const aiScene *scene);
+        std::shared_ptr<Mesh> processMesh(aiMesh *mesh, const aiScene *scene);
 };
 
 

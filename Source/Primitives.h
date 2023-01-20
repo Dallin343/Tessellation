@@ -11,6 +11,8 @@
 #include <vector>
 #include <memory>
 #include <cstdarg>
+#include <glm/mat4x4.hpp>
+#include <cfloat>
 
 struct VertexData {
     glm::vec3 Position;
@@ -20,36 +22,58 @@ struct VertexData {
 class Vertex;
 class Edge;
 class Face;
-typedef typename std::shared_ptr<Edge> EPtr;
-typedef typename std::shared_ptr<Face> FPtr;
-typedef typename std::shared_ptr<Vertex> VPtr;
+class Pair;
 
-typedef typename std::vector<EPtr> EBuf;
-typedef typename std::vector<FPtr> FBuf;
-typedef typename std::vector<VPtr> VBuf;
+typedef typename std::shared_ptr<Edge> EdgePtr;
+typedef typename std::shared_ptr<Face> FacePtr;
+typedef typename std::shared_ptr<Vertex> VertexPtr;
+typedef typename std::shared_ptr<Pair> PairPtr;
+
+typedef typename std::vector<EdgePtr> EBuf;
+typedef typename std::vector<FacePtr> FBuf;
+typedef typename std::vector<VertexPtr> VBuf;
+
+class Pair {
+public:
+    Pair(const VertexPtr &a, const VertexPtr &b);
+    Pair(VertexPtr &a, VertexPtr &b, glm::dvec3 candidate);
+    double GetCost() const;
+    void SetCost(double cost);
+
+    const glm::dvec3 &GetCandidate() const;
+
+    void SetCandidate(const glm::dvec3 &candidate);
+
+    const std::array<VertexPtr, 2> &GetVertices() const;
+
+private:
+    double cost = DBL_MAX;
+    std::array<VertexPtr, 2> vertices;
+    glm::dvec3 candidate = {};
+};
 
 class Edge {
 public:
-    Edge(VPtr& a, VPtr& b);
-    const std::vector<FPtr>& GetFaces() const;
-    void AddFace(FPtr& face);
-    const std::array<VPtr, 2> &GetVertices() const;
+    Edge(VertexPtr& a, VertexPtr& b);
+    const std::vector<FacePtr>& GetFaces() const;
+    void AddFace(FacePtr& face);
+    const std::array<VertexPtr, 2> &GetVertices() const;
     glm::dvec3 GetVector();
 
 
 private:
-    std::vector<FPtr> faces = {};
-    std::array<VPtr, 2> vertices;
+    std::vector<FacePtr> faces = {};
+    std::array<VertexPtr, 2> vertices;
 };
 
 class Face {
 public:
-    Face(EPtr& e1, EPtr& e2, EPtr& e3);
-    const std::array<EPtr, 3> &GetEdges() const;
+    Face(EdgePtr& e1, EdgePtr& e2, EdgePtr& e3);
+    const std::array<EdgePtr, 3> &GetEdges() const;
     const glm::dvec4 & GetPlane() const;
 
 private:
-    std::array<EPtr, 3> edges;
+    std::array<EdgePtr, 3> edges;
     glm::dvec3 normal;
     glm::dvec4 plane;
 };
@@ -61,8 +85,12 @@ public:
     Vertex(): Position(), Normal() {}
     Vertex(glm::dvec3 position, glm::dvec3 normal): Position(position), Normal(normal) {}
 
-    const std::vector<EPtr> &GetEdges() const;
-    void AddEdge(EPtr& edge);
+    const std::vector<EdgePtr> &GetEdges() const;
+    void AddEdge(EdgePtr& edge);
+
+    const std::vector<FacePtr>& GetFaces() const;
+    void AddFace(FacePtr& face);
+
     VertexData GetVertexData();
     const glm::dvec3 &GetPosition() const;
     void SetPosition(const glm::vec3 &position);
@@ -71,8 +99,14 @@ public:
     unsigned int GetID() const;
     void SetID(unsigned int id);
 
+    glm::dmat4 Q = {{0.0, 0.0, 0.0, 0.0},
+                    {0.0, 0.0, 0.0, 0.0},
+                    {0.0, 0.0, 0.0, 0.0},
+                    {0.0, 0.0, 0.0, 0.0}};
 private:
-    std::vector<EPtr> edges = {};
+    std::vector<EdgePtr> edges = {};
+    std::vector<FacePtr> faces = {};
+
     // position
     glm::dvec3 Position;
     // normal

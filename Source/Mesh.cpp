@@ -70,3 +70,11 @@ void Mesh::ToGraph() {
 const VBuf &Mesh::GetVertices() const {
     return vertices;
 }
+
+const EBuf &Mesh::GetEdges() const {
+    return edges;
+}
+
+const FBuf &Mesh::GetFaces() const {
+    return faces;
+}
