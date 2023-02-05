@@ -16,6 +16,24 @@ include_directories(
         Source
 )
 
+#find_package(CGAL QUIET COMPONENTS Core MPFI)
+set(CGAL_DIR Vendor/CGAL)
+set(CGAL_DISABLE_GMP OFF)
+set(GMP_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmp.so)
+set(MPFR_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfr.so)
+set(GMPXX_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmpxx.so)
+set(MPFI_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfi.so)
+
+find_package(CGAL QUIET COMPONENTS Core)
+find_package(MPFI)
+if(MPFI_FOUND AND NOT CGAL_DISABLE_GMP)
+    message("Found MPFI")
+    include(${MPFI_USE_FILE})
+    include(CGAL_VersionUtils)
+
+endif()
+#add_subdirectory(Vendor/CGAL)
+
 set(BUILD_APPS OFF CACHE BOOL "" FORCE)
 add_subdirectory(Vendor/openmesh)
 
@@ -51,7 +69,7 @@ add_executable(Tessellation
         Source/OMesh.cpp
         Source/OMesh.h
         Source/Tessellator.cpp
-        Source/Tessellator.h)
+        Source/Tessellator.h Source/MeshImpl.h)
 
 target_link_libraries(Tessellation PRIVATE
         glfw
@@ -61,4 +79,6 @@ target_link_libraries(Tessellation PRIVATE
         OpenMeshCore
         OpenMeshTools
         Hungarian
+        CGAL::CGAL
+        CGAL::CGAL_Core
         )

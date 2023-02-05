@@ -60,8 +60,8 @@
 // 'find_package(CGAL QUIET COMPONENTS Core MPFI)'
 
 // -----------------------------------------------------------------------------
-#define CGAL_SMP_SOLVE_CUBIC_EQUATION
-//#define CGAL_SMP_SOLVE_EQUATIONS_WITH_GMP
+//#define CGAL_SMP_SOLVE_CUBIC_EQUATION
+#define CGAL_SMP_SOLVE_EQUATIONS_WITH_GMP
 // -----------------------------------------------------------------------------
 
 #if !defined(CGAL_SMP_SOLVE_CUBIC_EQUATION) && !defined(CGAL_SMP_SOLVE_EQUATIONS_WITH_GMP)
