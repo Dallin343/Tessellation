@@ -10,6 +10,7 @@
 #include <memory>
 #include <glm/glm.hpp>
 #include <optional>
+#include <unordered_set>
 
 typedef typename std::array<glm::dvec3, 3> Triangle;
 typedef typename std::array<unsigned int, 3> FaceIndices;
@@ -19,6 +20,7 @@ typedef typename std::array<std::vector<int>, 3> RingVertexIndices;
 class TessellatedTriangle {
 public:
     std::vector<glm::dvec3> vertices;
+    std::unordered_set<unsigned int> innerVertexIndices;
     std::vector<FaceIndices> faces;
 };
 

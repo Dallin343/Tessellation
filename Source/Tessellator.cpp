@@ -83,6 +83,7 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
     }
 
     // Generate faces to fill each consecutive ring pair
+    std::unordered_set<unsigned int> innerVertexIndices;
     std::vector<FaceIndices> faces;
     for (int i = 0; i < rings.size() - 1; i++) {
         auto [outerRingUVVertexIndices,
@@ -92,6 +93,10 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
         auto [innerRingUVVertexIndices,
               innerRingVWVertexIndices,
               innerRingWUVertexIndices] = ringVertexIndices[i + 1];
+
+        innerVertexIndices.insert(innerRingUVVertexIndices.begin(), innerRingUVVertexIndices.end());
+        innerVertexIndices.insert(innerRingVWVertexIndices.begin(), innerRingVWVertexIndices.end());
+        innerVertexIndices.insert(innerRingWUVertexIndices.begin(), innerRingWUVertexIndices.end());
 
         generateFacesBetween(outerRingUVVertexIndices, innerRingUVVertexIndices,
                              vertices, planeNrm, faces);
@@ -131,6 +136,7 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
         }
     }
     tessellated->vertices = vertices;
+    tessellated->innerVertexIndices = innerVertexIndices;
     tessellated->faces = faces;
     return tessellated;
 }
@@ -140,7 +146,7 @@ std::vector<glm::dvec3> Tessellator::subdivideEdge(glm::dvec3 a, glm::dvec3 b, i
     newVertices.reserve(subdivision + 2);
     newVertices.push_back(a);
 
-    glm::dvec3 aToB = a - b;
+    glm::dvec3 aToB = b - a;
     glm::dvec3 aToBNorm = glm::normalize(aToB);
     double len = glm::length(aToB) / subdivision;
 
@@ -230,7 +236,8 @@ std::optional<glm::dvec3> Tessellator::intersect(glm::dvec3 c, glm::dvec3 e, glm
 
     glm::dvec3 i = e * (hLen / kLen);
 
-    if (glm::length(glm::cross(h, k)) > 0.0000001) {
+//    if (glm::length(glm::cross(h, k)) > 0.0000001) {
+    if (glm::dot(h, k) > 0) {
         return c + i;
     }
 

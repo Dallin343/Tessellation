@@ -12,6 +12,8 @@
 #include <CGAL/Surface_mesh_parameterization/ARAP_parameterizer_3.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
 #include <CGAL/Polygon_mesh_processing/measure.h>
+#include <CGAL/Polygon_mesh_processing/compute_normal.h>
+#include <CGAL/draw_surface_mesh.h>
 #include <CGAL/boost/graph/properties.h>
 
 #include <unordered_map>
@@ -22,6 +24,9 @@
 #include <utility>
 #include <vector>
 
+#include <CGAL/Surface_mesh_parameterization/IO/File_off.h>
+#include <CGAL/Surface_mesh_parameterization/Circular_border_parameterizer_3.h>
+#include <CGAL/Surface_mesh_parameterization/Discrete_authalic_parameterizer_3.h>
 #include <CGAL/Surface_mesh_simplification/edge_collapse.h>
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/Count_ratio_stop_predicate.h>
 #include <CGAL/Surface_mesh_simplification/Policies/Edge_collapse/GarlandHeckbert_policies.h>
@@ -31,10 +36,22 @@
 #include <CGAL/Polygon_mesh_processing/shape_predicates.h>
 #include <CGAL/Point_set_2.h>
 
+#include <CGAL/AABB_tree.h>
+#include <CGAL/AABB_traits.h>
+#include <CGAL/AABB_face_graph_triangle_primitive.h>
+
 typedef CGAL::Simple_cartesian<double>            Kernel;
+typedef Kernel::Plane_3 Plane;
+typedef Kernel::Vector_3 Vector;
+typedef Kernel::Ray_3 Ray;
 typedef Kernel::Point_2                           Point_2;
 typedef Kernel::Point_3                           Point_3;
 typedef CGAL::Surface_mesh<Kernel::Point_3>       SurfaceMesh;
+
+typedef CGAL::AABB_face_graph_triangle_primitive<SurfaceMesh> Primitive;
+typedef CGAL::AABB_traits<Kernel, Primitive> Traits;
+typedef CGAL::AABB_tree<Traits> Tree;
+typedef boost::optional<Tree::Intersection_and_primitive_id<Ray>::Type> Ray_intersection;
 
 typedef std::pair<unsigned int, unsigned int> VertexUVDescriptor;
 typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, Kernel> Vb;
@@ -75,7 +92,11 @@ struct Seam_is_constrained_edge_map
     typedef boost::readable_property_map_tag                      category;
     Seam_is_constrained_edge_map(const SeamMesh& seamMesh) : seamMesh_ptr(&seamMesh) {}
     friend value_type get(const Seam_is_constrained_edge_map& m, const key_type& edge) {
-        return m.seamMesh_ptr->has_on_seam(edge);
+        auto result = m.seamMesh_ptr->has_on_seam(edge);
+        if (result) {
+            int x = 0;
+        }
+        return result;
     }
 };
 
