@@ -66,6 +66,9 @@ typedef boost::graph_traits<SurfaceMesh>::face_descriptor       SM_face_descript
 
 typedef SurfaceMesh::Property_map<SM_edge_descriptor, bool>           Seam_edge_pmap;
 typedef SurfaceMesh::Property_map<SM_vertex_descriptor, bool>         Seam_vertex_pmap;
+typedef SurfaceMesh::Property_map<SM_vertex_descriptor, Vector>   Normal_vertex_pmap;
+typedef SurfaceMesh::Property_map<SM_face_descriptor, Vector>   Normal_face_pmap;
+typedef SurfaceMesh::Property_map<SM_vertex_descriptor, double> Gauss_vertex_pmap;
 
 typedef CGAL::Seam_mesh<SurfaceMesh, Seam_edge_pmap, Seam_vertex_pmap>  SeamMesh;
 typedef boost::graph_traits<SeamMesh>::vertex_descriptor                    vertex_descriptor;

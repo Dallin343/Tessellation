@@ -16,6 +16,8 @@
 #include <Hungarian.h>
 #include <igl/gaussian_curvature.h>
 
+//#define DRAW_CGAL
+
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
@@ -59,6 +61,9 @@ std::optional<glm::dvec3> barycentric(glm::dvec3 point, glm::dvec3 t0, glm::dvec
 }
 glm::dvec3 toGLM(Kernel::Vector_3 p) {return {p.x(), p.y(), p.z()};}
 glm::dvec3 toGLM(Kernel::Point_3 p) {return {p.x(), p.y(), p.z()};}
+glm::dvec2 toGLM(Point_2 p) { return {p.x(), p.y()}; }
+
+Point_3 toPoint3(glm::dvec3 p) { return {p.x, p.y, p.z}; }
 
 struct Stats {
     unsigned int removed_verts = 0;
@@ -154,22 +159,14 @@ struct CollapseVisitor : SMS::Edge_collapse_visitor_base<SurfaceMesh> {
                 for (auto vertDesc : v0ds) {
                     if (vertDesc != vd) {
                         auto hd = mesh.halfedge(vd, vertDesc);
-                        if (hd != SurfaceMesh::null_halfedge()) {
-                            put(uvmap, hd, p_2);
-                        } else {
-                            int x = 0;
-                        }
+                        put(uvmap, hd, p_2);
                     }
                 }
             } else if (vd == v0) {
                 for (auto vertDesc : v1ds) {
                     if (vertDesc != vd) {
                         auto hd = mesh.halfedge(vd, vertDesc);
-                        if (hd != SurfaceMesh::null_halfedge()) {
-                            put(uvmap, hd, p_2);
-                        } else {
-                            int x = 0;
-                        }
+                        put(uvmap, hd, p_2);
                     }
                 }
             }
@@ -369,7 +366,7 @@ void ReadUV(const std::shared_ptr<SurfaceMesh>& mesh, const std::string& filenam
     std::copy(uvmap.begin(), uvmap.end(), highResUVMap.begin());
 }
 
-SurfaceMesh::Property_map<SM_vertex_descriptor, double> CalculateGaussianCurvature(SurfaceMesh& mesh) {
+Gauss_vertex_pmap CalculateGaussianCurvature(SurfaceMesh& mesh) {
     Eigen::MatrixX3d V(mesh.num_vertices(), 3);
     Eigen::MatrixX3i F(mesh.num_faces(), 3);
 
@@ -504,12 +501,36 @@ std::optional<glm::dvec3> project(const BaryData& d, glm::dvec3 w) {
     return std::make_optional<glm::dvec3>(alpha, beta, gamma);
 }
 
+glm::dvec3 barycentric(glm::dvec2 p, glm::dvec2 a, glm::dvec2 b, glm::dvec2 c) {
+    glm::dvec2 v0 = b - a;
+    glm::dvec2 v1 = c - a;
+    glm::dvec2 v2 = p - a;
+    double d00 = glm::dot(v0, v0);
+    double d01 = glm::dot(v0, v1);
+    double d11 = glm::dot(v1, v1);
+    double d20 = glm::dot(v2, v0);
+    double d21 = glm::dot(v2, v1);
+    double denom = d00 * d11 - d01 * d01;
+    double v = (d11 * d20 - d01 * d21) / denom;
+    double w = (d00 * d21 - d01 * d20) / denom;
+    double u = 1.0 - v - w;
+    return {u, v, w};
+}
+
 double barycentric_distance(BaryData d, glm::dvec3 p, glm::dvec3 q) {
     auto PQ = p - q;
     auto dist2 = -(d.a*d.a*PQ.y*PQ.z) - (d.b*d.b*PQ.z*PQ.x) - (d.c*d.c*PQ.x*PQ.y);
     auto dist = glm::sqrt(dist2);
     return dist;
 }
+
+double barycentric_distance(glm::dvec3 p, glm::dvec3 q, double t1t2, double t0t2, double t0t1) {
+    auto PQ = p - q;
+    auto dist2 = -(t1t2*t1t2*PQ.y*PQ.z) - (t0t2*t0t2*PQ.z*PQ.x) - (t0t1*t0t1*PQ.x*PQ.y);
+    auto dist = glm::sqrt(dist2);
+    return dist;
+}
+
 Vector lerp(const Vector& a, const Vector& b, double t) {
     return a*t + b*(1.0-t);
 }
@@ -529,79 +550,153 @@ struct TessellationData {
     unsigned int ol0{1}, ol1{1}, ol2{1}, il{2};
     std::vector<glm::dvec3> tessBaryCoords, featureBaryCoords, feature3DCoords;
     std::vector<int> assignment;
-    BaryData baryData{};
     std::shared_ptr<TessellatedTriangle> tessTri;
 };
 
-typedef std::array<Point_2, 3> TriRange;
-typedef std::array<std::pair<SM_halfedge_descriptor, glm::dvec3>, 3> TriPoints3;
-typedef std::vector<std::pair<SM_halfedge_descriptor, glm::dvec3>> FeatureVerts;
 
-FeatureVerts extractFeatureVertices(Point2Set& pSet, TriRange tri, const SurfaceMesh& highResMesh) {
+class ProcessFace {
+public:
+    ProcessFace() {}
+
+    ProcessFace(const SM_face_descriptor &fd, const array<SM_vertex_descriptor, 3> &vds, const array<Point_2, 3> &uvs,
+                const array<Point_3, 3> &coords) : fd(fd), vds(vds), uvs(uvs), coords(coords) {}
+
+    SM_face_descriptor fd {};
+    std::array<SM_vertex_descriptor, 3> vds {};
+    std::array<Point_2, 3> uvs {};
+    std::array<Point_3, 3> coords {};
+};
+typedef std::shared_ptr<ProcessFace> ProcessFacePtr;
+
+class FeatureVert {
+public:
+    FeatureVert(const SM_halfedge_descriptor &hd, const glm::dvec3 &cartCoords, const glm::dvec3 &baryCoords,
+                const glm::dvec2 &uv) : hd(hd), cartCoords(cartCoords), baryCoords(baryCoords), uv(uv) {}
+
+    SM_halfedge_descriptor hd;
+    glm::dvec3 cartCoords;
+    glm::dvec3 baryCoords;
+    glm::dvec2 uv;
+};
+typedef std::shared_ptr<FeatureVert> FeatureVertPtr;
+
+class TessellatedVert {
+public:
+    TessellatedVert() {
+        undoMove();
+    }
+
+    TessellatedVert(ProcessFacePtr face, FeatureVertPtr matchingFeature,
+                    const glm::dvec3 &origCoords, const glm::dvec3 &baryCoords) :
+                    face(std::move(face)), matchingFeature(std::move(matchingFeature)), origCoords(origCoords),
+                    baryCoords(baryCoords) {
+        undoMove();
+    }
+
+    TessellatedVert(ProcessFacePtr face, const glm::dvec3 &origCoords, const glm::dvec3 &baryCoords) :
+                    face(std::move(face)), origCoords(origCoords), baryCoords(baryCoords) {
+        undoMove();
+    }
+
+    void undoMove() {
+        newCoords = {minDbl, minDbl, minDbl};
+    }
+
+    bool isAssigned() {
+        return newCoords != glm::dvec3(minDbl, minDbl, minDbl);
+    }
+
+    ProcessFacePtr face;
+    FeatureVertPtr matchingFeature = nullptr;
+    glm::dvec3 origCoords;
+    glm::dvec3 newCoords{};
+    glm::dvec3 baryCoords;
+    glm::dvec2 uv{};
+    bool isInner = false;
+    bool anchored = false;
+    SM_vertex_descriptor vd;
+
+private:
+    double minDbl = std::numeric_limits<double>::min();
+};
+typedef std::shared_ptr<TessellatedVert> TessVertPtr;
+typedef std::vector<FeatureVertPtr> FeatureVerts;
+typedef std::vector<TessVertPtr> TessellatedVerts;
+typedef std::unordered_map<SM_vertex_descriptor, TessVertPtr> VDToTessVert;
+typedef std::shared_ptr<TessellatedTriangle> TessTriPtr;
+
+FeatureVerts extractFeatureVertices(Point2Set& pSet, const ProcessFacePtr& tri, const SurfaceMesh& highResMesh) {
     std::list<Vertex_handle> vertexList;
-    pSet.range_search(tri[0], tri[1], tri[2], std::back_inserter(vertexList));
-//    std::cout << "Found: " << vertexList.size() << std::endl;
+    pSet.range_search(tri->uvs.at(0), tri->uvs.at(1), tri->uvs.at(2), std::back_inserter(vertexList));
 
     FeatureVerts foundVerts;
     foundVerts.reserve(vertexList.size());
+
+    auto t0 = toGLM(tri->uvs.at(0)); // (1, 0, 0)
+    auto t1 = toGLM(tri->uvs.at(1)); // (0, 1, 0)
+    auto t2 = toGLM(tri->uvs.at(2)); // (0, 0, 1)
 
     for (const auto vHandle : vertexList) {
         auto hd = SM_halfedge_descriptor(vHandle->info());
         Point_3 point = highResMesh.point(highResMesh.source(hd));
         glm::dvec3 vertex = {point.x(), point.y(), point.z()};
+        glm::dvec2 uv ={vHandle->point().x(), vHandle->point().y()};
+        glm::dvec3 baryCoords = barycentric(uv, t0, t1, t2);
 
-        foundVerts.emplace_back(hd, vertex);
+        FeatureVertPtr feature = std::make_shared<FeatureVert>(hd, vertex, baryCoords, uv);
+        foundVerts.emplace_back(feature);
     }
 
     return foundVerts;
 }
 
-TessellationData minBiGraphMatch(TriPoints3 triPoints, const FeatureVerts& featureVerts) {
-    TessellationData tessData;
+TessellatedVerts minBiGraphMatch(const ProcessFacePtr& triRange, const FeatureVerts& featureVerts, TessTriPtr& tessTri) {
     int ol0 = 5, ol1 = 5, ol2 = 5, il = 5;
-    tessData.ol0 = ol0; tessData.ol1 = ol1; tessData.ol2 = ol2; tessData.il = il;
 
-    auto p0 = triPoints.at(0).second;
-    auto p1 = triPoints.at(1).second;
-    auto p2 = triPoints.at(2).second;
-    BaryData bary = get_bary_vars(p0, p1, p2);
-
-    std::vector<glm::dvec3> featurePoints;
-    std::vector<glm::dvec3> featureBaryCoords;
-    // project vertices into barycentric coords, only keeping ones that are actually inside.
-    for (auto kv : featureVerts) {
-        auto vertex = kv.second;
-        auto proj = project(bary, vertex - p0);
-
-        if (proj.has_value()) {
-            featureBaryCoords.emplace_back(proj.value());
-            featurePoints.emplace_back(vertex);
-        }
-    }
+    auto t0 = toGLM(triRange->uvs.at(0)); // (1, 0, 0)
+    auto t1 = toGLM(triRange->uvs.at(1)); // (0, 1, 0)
+    auto t2 = toGLM(triRange->uvs.at(2)); // (0, 0, 1)
 
     // find barycentric coords for tessellated vertices
-    Triangle tri = {glm::dvec3(0.0, 0.0, 1.0), glm::dvec3(1.0, 0.0, 0.0), glm::dvec3(0.0, 1.0, 0.0)};
-    auto tessTri = Tessellator::TessellateTriangle(tri, ol0, ol1, ol2, il);
-    std::vector<glm::dvec3> tessBaryCoords;
-    tessBaryCoords.reserve(tessTri->innerVertexIndices.size());
+    Triangle tri = {glm::dvec3(1.0, 0.0, 0.0), glm::dvec3(0.0, 1.0, 0.0), glm::dvec3(0.0, 0.0, 1.0)};
+    tessTri = Tessellator::TessellateTriangle(tri, ol0, ol1, ol2, il);
+    std::vector<glm::dvec3> innerVertBaryCoords;
 
-    // Only look at inner vertices, not edge vertices
+    TessellatedVerts tessellatedVerts;
+    tessellatedVerts.reserve(tessTri->vertices.size());
+
+    innerVertBaryCoords.reserve(tessTri->innerVertexIndices.size());
+
+    //TODO: Optimize this potentially
+    //Add tessellated vertices to map;
+    for (auto bary : tessTri->vertices) {
+        auto c = triRange->coords;
+        auto origCoords = bary.x * toGLM(c.at(0)) + bary.y * toGLM(c.at(1)) + bary.z * toGLM(c.at(2));
+        TessVertPtr vert = std::make_shared<TessellatedVert>(triRange, origCoords, bary);
+        tessellatedVerts.push_back(vert);
+    }
+
+    // Mark inner vertices in map
     for (auto idx : tessTri->innerVertexIndices) {
         auto vertex = tessTri->vertices.at(idx);
-        tessBaryCoords.push_back(vertex);
+        innerVertBaryCoords.push_back(vertex);
+        tessellatedVerts.at(idx)->isInner = true;
     }
 
     //Create Distance matrix for hungarian algo
-    std::vector<std::vector<double>> distMatrix(tessBaryCoords.size());
+    std::vector<std::vector<double>> distMatrix(innerVertBaryCoords.size());
     for (auto& col : distMatrix) {
-        col.reserve(featureBaryCoords.size());
+        col.reserve(featureVerts.size());
     }
 
     //Generate edges between sides of the graph
-    for (int i = 0; i < tessBaryCoords.size(); i++) {
-        for (auto fVert : featureBaryCoords) {
-            auto tVert = tessBaryCoords.at(i);
-            double dist = barycentric_distance(bary, tVert, fVert);
+    for (int i = 0; i < innerVertBaryCoords.size(); i++) {
+        for (const auto& fVert : featureVerts) {
+            auto tVert = innerVertBaryCoords.at(i);
+            double t0t1 = glm::length(t1 - t0);
+            double t0t2 = glm::length(t2 - t0);
+            double t1t2 = glm::length(t2 - t1);
+            double dist = barycentric_distance(tVert, fVert->baryCoords, t1t2, t0t2, t0t1);
             distMatrix.at(i).push_back(dist);
         }
     }
@@ -610,41 +705,18 @@ TessellationData minBiGraphMatch(TriPoints3 triPoints, const FeatureVerts& featu
     std::vector<int> assignment;
     hungarian.Solve(distMatrix, assignment);
 
-    tessData.tessBaryCoords = tessBaryCoords;
-    tessData.featureBaryCoords = featureBaryCoords;
-    tessData.feature3DCoords = featurePoints;
-    tessData.assignment = assignment;
-    tessData.baryData = bary;
-    tessData.tessTri = tessTri;
-    return tessData;
-}
+    for (int i = 0; i < assignment.size(); i++) {
+        auto assign = assignment.at(i);
 
-void moveAndValidate(const TessellationData& tessData) {
-    std::unordered_map<unsigned int, glm::dvec3> origVerts;
-    std::unordered_map<unsigned int, glm::dvec3> movedVerts;
-    std::unordered_set<unsigned int> unmatched;
+        auto bary = innerVertBaryCoords.at(i);
+        auto c = triRange->coords;
+        auto origCoords = bary.x * toGLM(c.at(0)) + bary.y * toGLM(c.at(1)) + bary.z * toGLM(c.at(2));
 
-    unsigned int i = 0;
-    for (auto vIdx : tessData.tessTri->innerVertexIndices) {
-        glm::dvec3 vert = tessData.tessTri->vertices.at(vIdx);
-        glm::dvec3 baryCoord = tessData.tessBaryCoords.at(i);
-        glm::dvec3 p0 = tessData.baryData.p0;
-        glm::dvec3 p1 = tessData.baryData.p1;
-        glm::dvec3 p2 = tessData.baryData.p2;
-
-        glm::dvec3 origCoord = baryCoord.x * p0 + baryCoord.y * p1 + baryCoord.z * p2;
-        origVerts.insert({vIdx, origCoord});
-
-        int featureIdx = tessData.assignment.at(i);
-        if (featureIdx != -1) {
-            glm::dvec3 newCoord = tessData.feature3DCoords.at(featureIdx);
-            movedVerts.insert({vIdx, newCoord});
-        } else {
-            unmatched.insert(vIdx);
+        if (assign != -1) {
+            tessellatedVerts.at(assign)->matchingFeature = featureVerts.at(assign);
         }
     }
-
-
+    return tessellatedVerts;
 }
 
 std::optional<Point_3> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree) {
@@ -667,13 +739,225 @@ std::optional<Point_3> findIntersection(const Point_3& p, const Vector& nrm, con
 
     if (foundForward && foundReverse) {
         return CGAL::squared_distance(p, forwardPoint) < CGAL::squared_distance(p, reversePoint)
-            ? forwardPoint : reversePoint;
+               ? forwardPoint : reversePoint;
     } else if (foundForward) {
         return forwardPoint;
     } else if (foundReverse) {
         return reversePoint;
     }
     return std::nullopt;
+}
+
+SurfaceMesh moveAndValidate(TessellatedVerts& tessVerts, const TessTriPtr& tessTri, const SurfaceMesh& sm, Tree& aabbTree,
+                            const Gauss_vertex_pmap& gaussMap) {
+    auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
+    auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
+
+    SurfaceMesh tessTriMesh;
+    auto triVNorms = tessTriMesh.add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
+    auto triFNorms = tessTriMesh.add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
+
+    ProcessFacePtr face = tessVerts.at(0)->face;
+    glm::dvec3 t0 = toGLM(face->coords.at(0));
+    glm::dvec3 t1 = toGLM(face->coords.at(1));
+    glm::dvec3 t2 = toGLM(face->coords.at(2));
+
+    std::vector<SM_vertex_descriptor> tessVertIdx;
+    tessVertIdx.reserve(tessTri->vertices.size());
+
+    // Construct temp tessellated triangle surfaceMesh
+    for (auto& tessVert : tessVerts) {
+        auto bary = tessVert->baryCoords;
+        glm::dvec3 coord = bary.x * t0 + bary.y * t1 + bary.z * t2;
+        auto vd = tessTriMesh.add_vertex({coord.x, coord.y, coord.z});
+        if (bary.x == 1.0) {
+            //At p0
+            put(triVNorms, vd, get(vNorms, face->vds.at(0)));
+        } else if (bary.y == 1.0) {
+            //At p1
+            put(triVNorms, vd, get(vNorms, face->vds.at(1)));
+        } else if (bary.z == 1.0) {
+            //At p2
+            put(triVNorms, vd, get(vNorms, face->vds.at(2)));
+        } else if (bary.x == 0.0) {
+            // On p1 - p2 edge
+            auto a = get(vNorms, face->vds.at(1));
+            auto b = get(vNorms, face->vds.at(2));
+            auto nrm = normalize(lerp(a, b, bary.y));
+            put(triVNorms, vd, nrm);
+        } else if (bary.y == 0.0) {
+            // On p0 - p2 edge
+            auto a = get(vNorms, face->vds.at(0));
+            auto b = get(vNorms, face->vds.at(2));
+            auto nrm = normalize(lerp(a, b, bary.x));
+            put(triVNorms, vd, nrm);
+        } else if (bary.z == 0.0) {
+            // On p0 - p1 edge
+            auto a = get(vNorms, face->vds.at(0));
+            auto b = get(vNorms, face->vds.at(1));
+            auto nrm = normalize(lerp(a, b, bary.x));
+            put(triVNorms, vd, nrm);
+        } else {
+            // Interior
+            auto a = get(vNorms, face->vds.at(0));
+            auto b = get(vNorms, face->vds.at(1));
+            auto c = get(vNorms, face->vds.at(2));
+            auto nrm = normalize(lerp(a, b, c, bary.x, bary.y, bary.z));
+            put(triVNorms, vd, nrm);
+        }
+        tessVert->vd = vd;
+    }
+
+    for (auto fIdx : tessTri->faces) {
+        auto vd0 = tessVerts.at(fIdx.at(0))->vd;
+        auto vd1 = tessVerts.at(fIdx.at(1))->vd;
+        auto vd2 = tessVerts.at(fIdx.at(2))->vd;
+        auto fd = tessTriMesh.add_face(vd0, vd1, vd2);
+        put(triFNorms, fd, get(fNorms, face->fd));
+    }
+#ifdef DRAW_CGAL
+    CGAL::draw(tessTriMesh);
+#endif
+
+    //Project edges along normal to intersection
+    for (const auto& vertex : tessVerts) {
+        if (!vertex->isInner) {
+            Point_3 vPoint = tessTriMesh.point(vertex->vd);
+            Vector norm = get(triVNorms, vertex->vd);
+            auto projOnNormal = findIntersection(vPoint, norm, aabbTree);
+            if (projOnNormal.has_value()) {
+                vertex->newCoords = toGLM(projOnNormal.value());
+                vertex->anchored = true;
+                tessTriMesh.point(vertex->vd) = projOnNormal.value();
+            }
+        }
+    }
+
+    //Move
+    std::unordered_map<SM_vertex_descriptor, TessVertPtr> vdToTessVert;
+    for (auto& tessVert : tessVerts) {
+        vdToTessVert.insert({tessVert->vd, tessVert});
+        if (!tessVert->isInner) {
+            continue;
+        }
+
+        if (tessVert->matchingFeature != nullptr) {
+            glm::dvec3 newCoord = tessVert->matchingFeature->cartCoords;
+            tessVert->newCoords = newCoord;
+            tessTriMesh.point(tessVert->vd) = {newCoord.x, newCoord.y, newCoord.z};
+        }
+    }
+
+    //Validate
+    for (auto tessFace : tessTriMesh.faces()) {
+        Vector norm = get(triFNorms, tessFace);
+        double dot;
+        do {
+            Vector newNorm = CGAL::Polygon_mesh_processing::compute_face_normal(tessFace, tessTriMesh);
+            dot = norm.x()*newNorm.x() + norm.y()*newNorm.y() + norm.z()*newNorm.z();
+
+            if (dot < 0) {
+                SM_vertex_descriptor minVD;
+                double minCurvature = std::numeric_limits<double>::max();
+                for (auto vd : tessTriMesh.vertices_around_face(tessTriMesh.halfedge(tessFace))) {
+                    auto tessVert = vdToTessVert.at(vd);
+                    if (!tessVert->isInner) {
+                        //This is an edge vertex, skip it
+                        continue;
+                    }
+
+                    auto feature = tessVert->matchingFeature;
+                    if (feature != nullptr) {
+                        auto featureVD = sm.source(feature->hd);
+                        if (get(gaussMap, featureVD) < minCurvature) {
+                            minCurvature = get(gaussMap, featureVD);
+                            minVD = vd;
+                        }
+                    }
+                }
+
+                auto vert = vdToTessVert.at(minVD);
+                tessTriMesh.point(minVD) = toPoint3(vert->origCoords);
+                vert->matchingFeature = nullptr;
+                vert->undoMove();
+            }
+        } while(dot < 0);
+    }
+#ifdef DRAW_CGAL
+    CGAL::draw(tessTriMesh);
+#endif
+    for (const auto& tessVert : tessVerts) {
+        if (tessVert->isInner && tessVert->matchingFeature != nullptr) {
+            tessVert->anchored = true;
+        } else if (!tessVert->isInner && tessVert->isAssigned()) {
+            tessVert->anchored = true;
+        }
+    }
+    return tessTriMesh;
+}
+
+TessellatedVerts projectAndValidate(TessellatedVerts& tessVerts, const SurfaceMesh& sm, Tree& aabbTree,
+                                    SurfaceMesh& tessTriMesh) {
+
+    auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
+    auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
+
+    auto triVNorms = tessTriMesh.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
+    auto triFNorms = tessTriMesh.property_map<SM_face_descriptor, Vector>("f:normal").first;
+
+    std::unordered_map<SM_vertex_descriptor, TessVertPtr> vdToTessVert;
+    //Project unmatched inner verts along normal to intersection
+    for (auto& tessVert : tessVerts) {
+        vdToTessVert.insert({tessVert->vd, tessVert});
+        if (tessVert->isInner && !tessVert->isAssigned()) {
+            Point_3 vPoint = tessTriMesh.point(tessVert->vd);
+            Vector norm = get(triVNorms, tessVert->vd);
+            auto projOnNormal = findIntersection(vPoint, norm, aabbTree);
+            if (projOnNormal.has_value()) {
+                auto newCoords = toGLM(projOnNormal.value());
+                tessVert->newCoords = newCoords;
+                tessTriMesh.point(tessVert->vd) = projOnNormal.value();
+            }
+        }
+    }
+
+    TessellatedVerts interpolateVerts;
+    //Validate
+    for (auto tessFace : tessTriMesh.faces()) {
+        Vector norm = get(triFNorms, tessFace);
+        double dot;
+        do {
+            Vector newNorm = CGAL::Polygon_mesh_processing::compute_face_normal(tessFace, tessTriMesh);
+            dot = norm.x()*newNorm.x() + norm.y()*newNorm.y() + norm.z()*newNorm.z();
+
+            if (dot < 0) {
+                SM_vertex_descriptor undoVD;
+                for (auto vd : tessTriMesh.vertices_around_face(tessTriMesh.halfedge(tessFace))) {
+                    auto tessVert = vdToTessVert.at(vd);
+                    if (!tessVert->isInner || tessVert->anchored) {
+                        //This is an edge or anchored vertex, skip it
+                        continue;
+                    }
+
+                    undoVD = vd;
+                }
+
+                auto vert = vdToTessVert.at(undoVD);
+                tessTriMesh.point(undoVD) = toPoint3(vert->origCoords);
+                vert->matchingFeature = nullptr;
+                vert->undoMove();
+            }
+        } while(dot < 0);
+    }
+
+    //Add unmatched edges to interpolation list
+    for (const auto& tessVert : tessVerts) {
+        if (!tessVert->isInner && !tessVert->isAssigned()) {
+            interpolateVerts.push_back(tessVert);
+        }
+    }
+
+    return interpolateVerts;
 }
 
 int main(int argc, char** argv)
@@ -686,7 +970,7 @@ int main(int argc, char** argv)
     std::cout << "Loading model from file..." << std::endl;
     std::shared_ptr<SurfaceMesh> sm = LoadMesh(filename);
     std::shared_ptr<SurfaceMesh> highResMesh = LoadMesh(filename);
-//    auto gaussMap = CalculateGaussianCurvature(*highResMesh);
+    auto gaussMap = CalculateGaussianCurvature(*highResMesh);
 //    auto baryMap = sm->add_property_map<SM_face_descriptor, Vertex_bary_map>("f:bary").first;
 
 
@@ -717,6 +1001,14 @@ int main(int argc, char** argv)
     std::cout << "Simplifying model with Garland-Heckbert..." << std::endl;
     collapse_gh<Classic_plane>(mesh, sm, 0.1);
 
+    SurfaceMesh sm_copy = SurfaceMesh(*sm);
+    std::cout << "Removed Verts: " << sm->number_of_removed_vertices() << std::endl;
+    std::cout << "Removed Edges: " << sm->number_of_removed_edges() << std::endl;
+    std::cout << "Removed Faces: " << sm->number_of_removed_faces() << std::endl;
+    std::cout << "Copy Removed Verts: " << sm_copy.number_of_removed_vertices() << std::endl;
+    std::cout << "Copy Removed Edges: " << sm_copy.number_of_removed_edges() << std::endl;
+    std::cout << "Copy Removed Faces: " << sm_copy.number_of_removed_faces() << std::endl;
+
     std::cout << "Calculating normals..." << std::endl;
     auto fNorms = sm->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
     auto vNorms = sm->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
@@ -729,19 +1021,28 @@ int main(int argc, char** argv)
     Point2Set pointSet;
     pointSet.insert(points.begin(), points.end());
 
+    auto edgeProcessed = sm->add_property_map<SM_edge_descriptor, bool>("e:processed", false).first;
+
     unsigned int count = 0;
     for (SM_face_descriptor fd : sm->faces()) {
+        auto triRange = std::make_shared<ProcessFace>();
+        triRange->fd = fd;
 
+        unsigned int arrIdx = 0;
+        for (SM_halfedge_descriptor hd: sm->halfedges_around_face(sm->halfedge(fd))) {
+            triRange->uvs.at(arrIdx) = get(uvmap, hd);
+            triRange->coords.at(arrIdx) = sm->point(sm->source(hd));
+            triRange->vds.at(arrIdx) = sm->source(hd);
+            arrIdx++;
+        }
 
-//        TriRange triRange;
-//        TriPoints3 triPoints;
-//        unsigned int arrIdx = 0;
-//        for (SM_halfedge_descriptor hd: sm->halfedges_around_face(sm->halfedge(fd))) {
-//            triRange.at(arrIdx) = uvmap[hd];
-//            triPoints.at(arrIdx++) = {hd, toGLM(sm->point(sm->source(hd)))};
-//        }
-//
-//        auto featureVerts = extractFeatureVertices(pointSet, triRange, *highResMesh);
+        auto featureVerts = extractFeatureVertices(pointSet, triRange, *highResMesh);
+
+        TessTriPtr tessellatedTriangle;
+        auto tessVerts = minBiGraphMatch(triRange, featureVerts, tessellatedTriangle);
+        auto tessTriMesh = moveAndValidate(tessVerts, tessellatedTriangle, *sm, aabbTree, gaussMap);
+        auto interpolateVerts = projectAndValidate(tessVerts, *sm, aabbTree, tessTriMesh);
+        CGAL::draw(tessTriMesh);
 //
 //        auto p0 = triPoints.at(0).second;
 //        auto p1 = triPoints.at(1).second;
