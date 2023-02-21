@@ -1001,14 +1001,6 @@ int main(int argc, char** argv)
     std::cout << "Simplifying model with Garland-Heckbert..." << std::endl;
     collapse_gh<Classic_plane>(mesh, sm, 0.1);
 
-    SurfaceMesh sm_copy = SurfaceMesh(*sm);
-    std::cout << "Removed Verts: " << sm->number_of_removed_vertices() << std::endl;
-    std::cout << "Removed Edges: " << sm->number_of_removed_edges() << std::endl;
-    std::cout << "Removed Faces: " << sm->number_of_removed_faces() << std::endl;
-    std::cout << "Copy Removed Verts: " << sm_copy.number_of_removed_vertices() << std::endl;
-    std::cout << "Copy Removed Edges: " << sm_copy.number_of_removed_edges() << std::endl;
-    std::cout << "Copy Removed Faces: " << sm_copy.number_of_removed_faces() << std::endl;
-
     std::cout << "Calculating normals..." << std::endl;
     auto fNorms = sm->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
     auto vNorms = sm->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
@@ -1023,6 +1015,7 @@ int main(int argc, char** argv)
 
     auto edgeProcessed = sm->add_property_map<SM_edge_descriptor, bool>("e:processed", false).first;
 
+    SurfaceMesh sm_copy = SurfaceMesh(*sm);
     unsigned int count = 0;
     for (SM_face_descriptor fd : sm->faces()) {
         auto triRange = std::make_shared<ProcessFace>();
