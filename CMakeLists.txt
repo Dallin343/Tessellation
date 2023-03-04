@@ -18,10 +18,10 @@ include_directories(
 
 set(CGAL_DIR Vendor/CGAL)
 set(CGAL_DISABLE_GMP OFF)
-set(GMP_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmp.so)
-set(MPFR_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfr.so)
-set(GMPXX_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmpxx.so)
-set(MPFI_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfi.so)
+#set(GMP_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmp.so)
+#set(MPFR_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfr.so)
+#set(GMPXX_LIBRARIES /usr/lib/x86_64-linux-gnu/libgmpxx.so)
+#set(MPFI_LIBRARIES /usr/lib/x86_64-linux-gnu/libmpfi.so)
 
 set(Qt5_DIR /usr/lib/x86_64-linux-gnu/cmake/Qt5 CACHE PATH "" FORCE)
 
@@ -73,7 +73,7 @@ add_executable(Tessellation
         Source/Tessellator.cpp
         Source/Tessellator.h
         Source/GlobalParameterization.cpp
-        Source/GlobalParameterization.h)
+        Source/GlobalParameterization.h Source/IO.cpp Source/IO.h Source/Strategy.cpp Source/Strategy.h)
 
 if(CGAL_Qt5_FOUND)
 target_link_libraries(Tessellation PRIVATE

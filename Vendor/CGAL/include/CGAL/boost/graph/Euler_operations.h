@@ -715,6 +715,8 @@ add_face(const VertexRange& vr, Graph& g)
 
   for (unsigned int i = 0, ii = 1; i<n; ++i, ++ii, ii %= n)
   {
+      auto tt = internal::is_isolated(vertices[i], g);
+      auto tt2 = is_border(vertices[i], g);
     if ( ! internal::is_isolated(vertices[i], g)
       && ! is_border(vertices[i], g))
       return boost::graph_traits<Graph>::null_face();
