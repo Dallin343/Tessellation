@@ -622,6 +622,9 @@ loop()
 
       if(is_collapse_topologically_valid(profile))
       {
+          if (m_current_edge_count == 71307) {
+              int x = 0;
+          }
         Placement_type placement = get_placement(profile);
 
         if(is_collapse_geometrically_valid(profile, placement))

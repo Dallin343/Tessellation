@@ -21,7 +21,7 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
     const int innerLevel = il == 1 ? 2 : il;
 
     // Normal vector of the plane formed by the triangle
-    glm::dvec3 planeNrm = glm::normalize(glm::cross(v - u, w - u));
+    glm::vec3 planeNrm = glm::normalize(glm::cross(v - u, w - u));
 
     // Start by subdividing the outer edges according to the inner tessellation level
     std::vector<Ring> rings {
@@ -45,7 +45,7 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
     };
 
     // Generate vertex array and generate version of ring data structure with indexes
-    std::vector<glm::dvec3> vertices;
+    std::vector<glm::vec3> vertices;
     std::vector<std::array<std::vector<unsigned int>, 3>> ringVertexIndices;
     for (const auto& ring : rings) {
         auto [ringUVPoints, ringVWPoints, ringWUPoints] = ring;
@@ -119,7 +119,7 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
                                   innermostWUVertexIndices.at(0), vertices, planeNrm));
     } else {
         // Innermost triangle is subdivided, generate faces between all the points on the ring and the centerpoint
-        glm::dvec3 centerVertex = ((u + v) + w) / 3.0;
+        glm::vec3 centerVertex = ((u + v) + w) / 3.0f;
         vertices.push_back(centerVertex);
         unsigned int centerVertexIdx = vertices.size() - 1;
         for (int i = 0; i < innermostUVVertexIndices.size() - 1; i++) {
@@ -141,14 +141,14 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
     return tessellated;
 }
 
-std::vector<glm::dvec3> Tessellator::subdivideEdge(glm::dvec3 a, glm::dvec3 b, int subdivision) {
-    auto newVertices = std::vector<glm::dvec3>();
+std::vector<glm::vec3> Tessellator::subdivideEdge(glm::vec3 a, glm::vec3 b, int subdivision) {
+    auto newVertices = std::vector<glm::vec3>();
     newVertices.reserve(subdivision + 2);
     newVertices.push_back(a);
 
-    glm::dvec3 aToB = b - a;
-    glm::dvec3 aToBNorm = glm::normalize(aToB);
-    double len = glm::length(aToB) / subdivision;
+    glm::vec3 aToB = b - a;
+    glm::vec3 aToBNorm = glm::normalize(aToB);
+    float len = glm::length(aToB) / float(subdivision);
 
     for (int i = 0; i < subdivision - 1; i++) {
         newVertices.push_back(a + (aToBNorm * (len * (i+1))));
@@ -159,30 +159,30 @@ std::vector<glm::dvec3> Tessellator::subdivideEdge(glm::dvec3 a, glm::dvec3 b, i
 
 Ring Tessellator::generateInnerRing(const Ring &outerRing) {
     auto [outerUVPoints, outerVWPoints, outerWUPoints] = outerRing;
-    glm::dvec3 outerU = outerUVPoints.at(0);
-    glm::dvec3 outerV = outerVWPoints.at(0);
-    glm::dvec3 outerW = outerWUPoints.at(0);
+    glm::vec3 outerU = outerUVPoints.at(0);
+    glm::vec3 outerV = outerVWPoints.at(0);
+    glm::vec3 outerW = outerWUPoints.at(0);
 
     // Outer edge vectors
-    glm::dvec3 outerUV = outerV - outerU;
-    glm::dvec3 outerVW = outerW - outerV;
-    glm::dvec3 outerWU = outerU - outerW;
+    glm::vec3 outerUV = outerV - outerU;
+    glm::vec3 outerVW = outerW - outerV;
+    glm::vec3 outerWU = outerU - outerW;
 
     // Normal vector of the plane formed by the triangle
-    glm::dvec3 planeNrm = glm::normalize(glm::cross(outerUV, outerVW));
+    glm::vec3 planeNrm = glm::normalize(glm::cross(outerUV, outerVW));
 
     // Edge normal vectors
-    glm::dvec3 outerUVNrm = glm::normalize(glm::cross(outerUV, planeNrm));
-    glm::dvec3 outerVWNrm = glm::normalize(glm::cross(outerVW, planeNrm));
-    glm::dvec3 outerWUNrm = glm::normalize(glm::cross(outerWU, planeNrm));
+    glm::vec3 outerUVNrm = glm::normalize(glm::cross(outerUV, planeNrm));
+    glm::vec3 outerVWNrm = glm::normalize(glm::cross(outerVW, planeNrm));
+    glm::vec3 outerWUNrm = glm::normalize(glm::cross(outerWU, planeNrm));
 
     // Vertices on each subdivided outer edge closest to the vertices of the original outer triangle
-    glm::dvec3 uv = outerUVPoints.at(1);
-    glm::dvec3 uw = outerWUPoints.at(outerWUPoints.size() - 2);
-    glm::dvec3 vw = outerVWPoints.at(1);
-    glm::dvec3 vu = outerUVPoints.at(outerUVPoints.size() - 2);
-    glm::dvec3 wu = outerWUPoints.at(1);
-    glm::dvec3 wv = outerVWPoints.at(outerVWPoints.size() - 2);
+    glm::vec3 uv = outerUVPoints.at(1);
+    glm::vec3 uw = outerWUPoints.at(outerWUPoints.size() - 2);
+    glm::vec3 vw = outerVWPoints.at(1);
+    glm::vec3 vu = outerUVPoints.at(outerUVPoints.size() - 2);
+    glm::vec3 wu = outerWUPoints.at(1);
+    glm::vec3 wv = outerVWPoints.at(outerVWPoints.size() - 2);
 
     auto innerUOpt = intersect(uv, outerUVNrm, uw, outerWUNrm);
     auto innerVOpt = intersect(vw, outerVWNrm, vu, outerUVNrm);
@@ -192,25 +192,25 @@ Ring Tessellator::generateInnerRing(const Ring &outerRing) {
         std::cerr << "Something weird happened with the intersections" << std::endl;
     }
 
-    glm::dvec3 innerU = innerUOpt.value();
-    glm::dvec3 innerV = innerVOpt.value();
-    glm::dvec3 innerW = innerWOpt.value();
+    glm::vec3 innerU = innerUOpt.value();
+    glm::vec3 innerV = innerVOpt.value();
+    glm::vec3 innerW = innerWOpt.value();
 
-    std::vector<glm::dvec3> innerUVPoints { innerU };
+    std::vector<glm::vec3> innerUVPoints { innerU };
     innerUVPoints.reserve(outerUVPoints.size() - 2);
     for (int i = 2; i < outerUVPoints.size() - 2; i++) {
         innerUVPoints.push_back(project(outerUVPoints.at(i), innerU, innerV));
     }
     innerUVPoints.push_back(innerV);
 
-    std::vector<glm::dvec3> innerVWPoints { innerV };
+    std::vector<glm::vec3> innerVWPoints { innerV };
     innerVWPoints.reserve(outerVWPoints.size() - 2);
     for (int i = 2; i < outerVWPoints.size() - 2; i++) {
         innerVWPoints.push_back(project(outerVWPoints.at(i), innerV, innerW));
     }
     innerVWPoints.push_back(innerW);
 
-    std::vector<glm::dvec3> innerWUPoints { innerW };
+    std::vector<glm::vec3> innerWUPoints { innerW };
     innerWUPoints.reserve(outerWUPoints.size() - 2);
     for (int i = 2; i < outerWUPoints.size() - 2; i++) {
         innerWUPoints.push_back(project(outerWUPoints.at(i), innerW, innerU));
@@ -220,21 +220,21 @@ Ring Tessellator::generateInnerRing(const Ring &outerRing) {
     return {innerUVPoints, innerVWPoints, innerWUPoints};
 }
 
-std::optional<glm::dvec3> Tessellator::intersect(glm::dvec3 c, glm::dvec3 e, glm::dvec3 d, glm::dvec3 f) {
-    glm::dvec3 g = d - c;
-    glm::dvec3 h = glm::cross(f, g);
-    double hLen = glm::length(h);
+std::optional<glm::vec3> Tessellator::intersect(glm::vec3 c, glm::vec3 e, glm::vec3 d, glm::vec3 f) {
+    glm::vec3 g = d - c;
+    glm::vec3 h = glm::cross(f, g);
+    float hLen = glm::length(h);
     if (hLen == 0) {
         return std::nullopt;
     }
 
-    glm::dvec3 k = glm::cross(f, e);
-    double kLen = glm::length(k);
+    glm::vec3 k = glm::cross(f, e);
+    float kLen = glm::length(k);
     if (kLen == 0) {
         return std::nullopt;
     }
 
-    glm::dvec3 i = e * (hLen / kLen);
+    glm::vec3 i = e * (hLen / kLen);
 
 //    if (glm::length(glm::cross(h, k)) > 0.0000001) {
     if (glm::dot(h, k) > 0) {
@@ -244,15 +244,15 @@ std::optional<glm::dvec3> Tessellator::intersect(glm::dvec3 c, glm::dvec3 e, glm
     return c - i;
 }
 
-glm::dvec3 Tessellator::project(glm::dvec3 point, glm::dvec3 a, glm::dvec3 b) {
-    glm::dvec3 ab = b - a;
-    double t = glm::dot(ab, point - a) / glm::dot(ab, ab);
+glm::vec3 Tessellator::project(glm::vec3 point, glm::vec3 a, glm::vec3 b) {
+    glm::vec3 ab = b - a;
+    float t = glm::dot(ab, point - a) / glm::dot(ab, ab);
     return (ab * t) + a;
 }
 
 void Tessellator::generateFacesBetween(const std::vector<unsigned int>& outerVertexIndices,
                                        const std::vector<unsigned int>& innerVertexIndices,
-                                       const std::vector<glm::dvec3> &vertices, glm::dvec3 normal,
+                                       const std::vector<glm::vec3> &vertices, glm::vec3 normal,
                                        std::vector<FaceIndices>& faces) {
         bool outerEdge = true;
         int outerIdx = 0;
@@ -273,7 +273,7 @@ void Tessellator::generateFacesBetween(const std::vector<unsigned int>& outerVer
 }
 
 FaceIndices Tessellator::buildFace(unsigned int a, unsigned int b, unsigned int c,
-                                   const std::vector<glm::dvec3>& vertices, glm::dvec3 normal) {
+                                   const std::vector<glm::vec3>& vertices, glm::vec3 normal) {
     if (isCCW(vertices.at(a), vertices.at(b), vertices.at(c), normal)) {
         return {a, b, c};
     } else {
@@ -281,7 +281,7 @@ FaceIndices Tessellator::buildFace(unsigned int a, unsigned int b, unsigned int 
     }
 }
 
-bool Tessellator::isCCW(glm::dvec3 a, glm::dvec3 b, glm::dvec3 c, glm::dvec3 normal) {
+bool Tessellator::isCCW(glm::vec3 a, glm::vec3 b, glm::vec3 c, glm::vec3 normal) {
     auto triNormal = glm::cross(b - a, c - a);
 
     return glm::dot(triNormal, normal) > 0;
