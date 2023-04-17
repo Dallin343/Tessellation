@@ -77,11 +77,11 @@ namespace Strategy {
                 float p_p0Len = glm::length(glmP - glmP0);
                 float pp0Ratio = p_p0Len / modelEdgeLen;
 
-                auto v0_v1_uv = get(uvmap, prof.v0_v1());
-                auto v1_vL_uv = get(uvmap, prof.v1_vL());
+                v0_v1_uv = get(uvmap, prof.v0_v1());
+                v1_vL_uv = get(uvmap, prof.v1_vL());
 
-                auto v1_v0_uv = get(uvmap, prof.v1_v0());
-                auto v0_vR_uv = get(uvmap, prof.v0_vR());
+                v1_v0_uv = get(uvmap, prof.v1_v0());
+                v0_vR_uv = get(uvmap, prof.v0_vR());
 
                 glm::vec2 glm_v0_v1_uv = Utils::toGLM(v0_v1_uv);
                 glm::vec2 glm_v1_vL_uv = Utils::toGLM(v1_vL_uv);
@@ -101,6 +101,8 @@ namespace Strategy {
 
                 v0 = prof.v0();
                 v1 = prof.v1();
+                vR = prof.vR();
+                vL = prof.vL();
                 v0ds.clear();
                 v1ds.clear();
                 v0Seams.clear();
@@ -109,11 +111,17 @@ namespace Strategy {
                 v1P_2.clear();
                 v0_hd_newUV.clear();
                 v1_hd_newUV.clear();
+                v0_seam_uvs.clear();
+                v1_seam_uvs.clear();
 
                 bool v0_is_on_seam = get(vSeamMap, v0);
                 bool v1_is_on_seam = get(vSeamMap, v1);
-                if (stats.processed_edges == 1136) {
+                if (stats.processed_edges == 4985) {
                     int x = 1;
+                    auto uv0 = get(uvmap, prof.v0_v1());
+                    auto uv1 = get(uvmap, prof.v1_v0());
+                    std::cout << "v0: " << v0 << " - " << uv0.x() << ", " << uv0.y() << "\n";
+                    std::cout << "v1: " << v1 << " - " << uv1.x() << ", " << uv1.y() << "\n";
                 }
 
                 int count = 0;
@@ -124,12 +132,15 @@ namespace Strategy {
                     auto vnext_uv = get(uvmap, mesh.next(hd));
 
                     if (v0_is_on_seam && v1_is_on_seam) {
-                        glm::vec2 v0_uv_glm = Utils::toGLM(v0_uv);
-                        glm::vec2 vnext_uv_glm = Utils::toGLM(vnext_uv);
-
-                        auto vec = vnext_uv_glm - v0_uv_glm;
-                        glm::vec2 newUV = v0_uv_glm + (vec * pp0Ratio);
-                        v0_hd_newUV.insert({mesh.target(hd), {newUV.x, newUV.y}});
+                        if (v0_uv == v0_vR_uv) {
+                            v0_hd_newUV.insert({mesh.target(hd), v1_v0_uv});
+                        }
+                        else if (v0_uv == v0_v1_uv) {
+                            v0_hd_newUV.insert({mesh.target(hd), v1_vL_uv});
+                        }
+                        else {
+                            v0_hd_newUV.insert({mesh.target(hd), v0_uv});
+                        }
                     }
                     else if (v0_is_on_seam) {
                         if (mesh.target(hd) != v1) {
@@ -145,6 +156,7 @@ namespace Strategy {
                     }
 
                     if (edge_is_on_seam) {
+                        v0_seam_uvs.emplace_back(mesh.target(hd), get(uvmap, hd));
                         v0Seams.insert({mesh.target(hd)});
                     }
                     count++;
@@ -158,12 +170,15 @@ namespace Strategy {
                     auto vnext_uv = get(uvmap, mesh.next(hd));
 
                     if (v0_is_on_seam && v1_is_on_seam) {
-                        glm::vec2 v1_uv_glm = Utils::toGLM(v1_uv);
-                        glm::vec2 vnext_uv_glm = Utils::toGLM(vnext_uv);
-
-                        auto vec = vnext_uv_glm - v1_uv_glm;
-                        glm::vec2 newUV = v1_uv_glm + (vec * pp0Ratio);
-                        v1_hd_newUV.insert({mesh.target(hd), {newUV.x, newUV.y}});
+                        if (v1_uv == v1_vL_uv) {
+                            v1_hd_newUV.insert({mesh.target(hd), v0_v1_uv});
+                        }
+                        else if (v1_uv == v1_v0_uv) {
+                            v1_hd_newUV.insert({mesh.target(hd), v0_vR_uv});
+                        }
+                        else {
+                            v1_hd_newUV.insert({mesh.target(hd), v1_uv});
+                        }
                     }
                     else if (v1_is_on_seam) {
                         if (mesh.target(hd) != v0) {
@@ -179,96 +194,11 @@ namespace Strategy {
                     }
 
                     if (edge_is_on_seam) {
+                        v1_seam_uvs.emplace_back(mesh.target(hd), get(uvmap, hd));
                         v1Seams.insert({mesh.target(hd)});
                     }
                     count++;
                 }
-
-
-//                if (get(vSeamMap, v0) && get(vSeamMap, v1)) {
-//                    for (auto hd : halfedges_around_source(v0, mesh)) {
-//                        if (get(eSeamMap, mesh.edge(hd))) {
-//                            v0Seams.insert(mesh.target(hd));
-//                        }
-//                        auto v0_p2 = get(uvmap, hd);
-//                        auto vnext_p2 = get(uvmap, mesh.next(hd));
-//
-//                        glm::vec2 glmP0_2 = Utils::toGLM(v0_p2);
-//                        glm::vec2 glmP1_2 = Utils::toGLM(vnext_p2);
-//
-//                        auto p0Vec = glmP1_2 - glmP0_2;
-//                        glm::vec2 newPoint_2 = glmP0_2 + (p0Vec * pp0Ratio);
-//                        v0P_2.insert({mesh.target(hd), {newPoint_2.x, newPoint_2.y}});
-//                    }
-//                    for (auto hd : halfedges_around_source(v1, mesh)) {
-//                        if (get(eSeamMap, mesh.edge(hd))) {
-//                            v1Seams.insert(mesh.target(hd));
-//                        }
-//                        auto v1_p2 = get(uvmap, hd);
-//                        auto vnext_p2 = get(uvmap, mesh.next(hd));
-//
-//                        glm::vec2 glmP0_2 = Utils::toGLM(v1_p2);
-//                        glm::vec2 glmP1_2 = Utils::toGLM(vnext_p2);
-//
-//                        auto p0Vec = glmP1_2 - glmP0_2;
-//                        glm::vec2 newPoint_2 = glmP0_2 + (p0Vec * pp0Ratio);
-//                        v1P_2.insert({mesh.target(hd), {newPoint_2.x, newPoint_2.y}});
-//                    }
-//                }
-//                else if (get(vSeamMap, v0)) {
-//                    for (auto hd: halfedges_around_source(v1, mesh)) {
-//                        auto edge = mesh.edge(prof.vL_v0());
-//                        auto edgeOnSeam = get(eSeamMap, edge);
-//
-//                        if ((hd != prof.v1_vL() || !get(vSeamMap, prof.vL())) || (hd == prof.v1_vL() && !edgeOnSeam)) {
-//                            v0ds.insert(mesh.target(hd));
-//                        }
-//                    }
-//                    for (auto hd : halfedges_around_source(v0, mesh)) {
-//                        if (get(eSeamMap, mesh.edge(hd))) {
-//                            v0Seams.insert(mesh.target(hd));
-//                        }
-//
-//                        if (mesh.target(hd) != v1) {
-//                            auto v0_p2 = get(uvmap, hd);
-//                            v0P_2.insert({mesh.target(hd), v0_p2});
-//                        }
-//                    }
-//                }
-//                else if (get(vSeamMap, v1)) {
-//                    for (auto hd: halfedges_around_source(v0, mesh)) {
-//                        auto edge = mesh.edge(prof.vR_v1());
-//                        auto edgeOnSeam = get(eSeamMap, edge);
-//
-//                        if ((hd != prof.v0_vR() || !get(vSeamMap, prof.vR())) || (hd == prof.v0_vR() && !edgeOnSeam)) {
-//                            v0ds.insert(mesh.target(hd));
-//                        }
-//
-//                        if (mesh.target(hd) != v1) {
-//                            auto v0_p2 = get(uvmap, hd);
-//                            v0P_2.insert({mesh.target(hd), v0_p2});
-//                        }
-//                    }
-//                    for (auto hd : halfedges_around_source(v1, mesh)) {
-//                        if (get(eSeamMap, mesh.edge(hd))) {
-//                            v1Seams.insert(mesh.target(hd));
-//                        }
-//
-//                        if (mesh.target(hd) != v0) {
-//                            auto v1_p2 = get(uvmap, hd);
-//                            v1P_2.insert({mesh.target(hd), v1_p2});
-//                        }
-//
-////                        auto vnext_p2 = get(uvmap, mesh.next(hd));
-////
-////                        glm::vec2 glmP0_2 = Utils::toGLM(v1_p2);
-////                        glm::vec2 glmP1_2 = Utils::toGLM(vnext_p2);
-////
-////                        auto p0Vec = glmP1_2 - glmP0_2;
-////                        glm::vec2 newPoint_2 = glmP0_2 + (p0Vec * pp0Ratio);
-//
-//                    }
-//                }
             }
         }
 
@@ -279,8 +209,10 @@ namespace Strategy {
             const auto& vSeamMap = mesh.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
             const auto& eSeamMap = mesh.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
 
-            auto v0Seam = get(vSeamMap, v0);
-            auto v1Seam = get(vSeamMap, v1);
+            bool v0Seam = get(vSeamMap, v0);
+            bool v1Seam = get(vSeamMap, v1);
+
+            bool using_non_seam_vd = false;
 
             if (v0Seam && !v1Seam) {
                 stats.total_seam_inner++;
@@ -295,6 +227,7 @@ namespace Strategy {
                             }
                         }
                     }
+                    using_non_seam_vd = true;
                 }
 //                auto p = mesh.point(vd);
                 if (mesh.point(vd) != p0) {
@@ -318,6 +251,7 @@ namespace Strategy {
                             }
                         }
                     }
+                    using_non_seam_vd = true;
                 }
 //                auto p = mesh.point(vd);
                 if (mesh.point(vd) != p1) {
@@ -343,47 +277,89 @@ namespace Strategy {
 
             if (v0Seam && v1Seam) {
                 int count = 0;
+                int aCount = 0, bCount = 0;
 //                auto& correctSide = vd == v0 ? v1Seams : v0Seams;
-                auto& correctUVs = vd == v0 ? v1_hd_newUV : v0_hd_newUV;
+                auto& otherUVs = vd == v0 ? v1_hd_newUV : v0_hd_newUV;
+                auto& vdUVs = vd == v0 ? v0_hd_newUV : v1_hd_newUV;
+
+                auto& otherSeamUVs = vd == v0 ? v1_seam_uvs : v0_seam_uvs;
+                auto& vdSeamUVs = vd == v0 ? v0_seam_uvs : v1_seam_uvs;
 
                 for (auto hd : halfedges_around_source(vd, mesh)) {
-                    std::stringstream press;
-                    press << "../out/beast-step" << count << "-pe.obj";
-                    std::ofstream preOut(press.str());
-                    IO::toOBJ(mesh, preOut);
+//                    std::stringstream press;
+//                    press << "../out/beast-step" << count << "-pe.obj";
+//                    std::ofstream preOut(press.str());
+//                    IO::toOBJ(mesh, preOut);
 
-                    std::cout << count << " found in map? ";
-                    if (correctUVs.find(mesh.target(hd)) != correctUVs.end()) {
-                        auto p = correctUVs.at(mesh.target(hd));
-                        std::cout << "yes. " << p.x() << ", " << p.y();
+//                    std::cout << count << " found in map? ";
+//                    auto targetVD = mesh.target(hd);
+//                    auto vR_uv = vdUVs.at(vR);
+//                    auto vL_uv = vdUVs.at(vL);
+//                    Point_2 hd_uv;
+//                    bool target_in_other = vdUVs.find(targetVD) != vdUVs.end();
+//                    if (target_in_other) {
+//                        hd_uv = vdUVs.at(targetVD);
+//                    }
+
+//                    if (target_in_other && otherSeamUVs.size() == 3 && hd_uv != vR_uv && hd_uv != vL_uv) {
+//                        put(uvmap, hd, hd_uv);
+//                    }
+                    auto targetVD = mesh.target(hd);
+                    bool target_in_vd = vdUVs.find(targetVD) != vdUVs.end();
+                    bool target_in_other = otherUVs.find(targetVD) != otherUVs.end();
+                    if (target_in_vd /*&& !target_in_other*/) {
+                        aCount++;
+                        auto p = vdUVs.at(targetVD);
+//                        std::cout << "in first. " << p.x() << ", " << p.y();
                         put(uvmap, hd, p);
                     }
-                    std::cout << std::endl;
+/*                    if (target_in_other*//* && !target_in_vd*//*) {
+                        bCount++;
+                        auto p = otherUVs.at(targetVD);
 
-                    std::stringstream poss;
-                    poss << "../out/beast-step" << count << "-post.obj";
-                    std::ofstream posOut(poss.str());
-                    IO::toOBJ(mesh, posOut);
-                    count++;
+                        put(uvmap, hd, p);
+                    }*/ else if (targetVD == vR){
+                        put(uvmap, hd, vd == v0 ? v0_vR_uv : v1_v0_uv);
+                    } else if (targetVD == vL) {
+                        put(uvmap, hd, vd == v0 ? v0_v1_uv : v1_vL_uv);
+                    } else {
+//                        std::cout << "None match" << std::endl;
+                    }
+
+//                    std::stringstream poss;
+//                    poss << "../out/beast-step" << count << "-post.obj";
+//                    std::ofstream posOut(poss.str());
+//                    IO::toOBJ(mesh, posOut);
+//                    count++;
                 }
                 int x = 1;
             }
             else if (get(vSeamMap, vd)) {
                 int count = 0;
+                auto& seamVertexUVs = v0Seam ? v0_hd_newUV : v1_hd_newUV;
                 for (auto hd: halfedges_around_source(vd, mesh)) {
-                    auto& correctUVs = vd == v0 ? v1_hd_newUV : v0_hd_newUV;
+                    auto& otherUVs = vd == v0 ? v1_hd_newUV : v0_hd_newUV;
+                    auto& vdUVs = vd == v0 ? v0_hd_newUV : v1_hd_newUV;
 
-//                    if (stats.processed_edges == 1136) {
+//                    if (stats.processed_edges == 4470) {
+//                        auto next = get(uvmap, mesh.next(hd));
+//                        std::cout << "Vd: " << mesh.target(hd) << " - " << next.x() << ", " << next.y() << std::endl;
 //                        std::stringstream press;
 //                        press << "../out/beast-step" << count << "-pe.obj";
 //                        std::ofstream preOut(press.str());
 //                        IO::toOBJ(mesh, preOut);
 //                    }
 
-                    if (correctUVs.find(mesh.target(hd)) != correctUVs.end()) {
-                        put(uvmap, hd, correctUVs.at(mesh.target(hd)));
+                    if (using_non_seam_vd && seamVertexUVs.find(mesh.target(hd)) != seamVertexUVs.end()) {
+                        put(uvmap, hd, seamVertexUVs.at(mesh.target(hd)));
                     }
-//                    if (stats.processed_edges == 1136) {
+                    else if (otherUVs.find(mesh.target(hd)) != otherUVs.end()) {
+                        put(uvmap, hd, otherUVs.at(mesh.target(hd)));
+                    }
+                    else if (vdUVs.find(mesh.target(hd)) != vdUVs.end()) {
+                        put(uvmap, hd, vdUVs.at(mesh.target(hd)));
+                    }
+//                    if (stats.processed_edges == 4470) {
 //                        std::stringstream press;
 //                        press << "../out/beast-step" << count++ << "-post.obj";
 //                        std::ofstream preOut(press.str());
@@ -396,13 +372,15 @@ namespace Strategy {
                     put(uvmap, hd, v0v1_p_2);
                 }
             }
-           stats.processed_edges++;
-//            if (stats.processed_edges % 1 == 0 && stats.processed_edges >= 1130 && stats.processed_edges <= 1140) {
-//                std::stringstream press;
-//                press << "../out/beast-collapse" << stats.processed_edges << ".obj";
-//                std::ofstream preOut(press.str());
-//                IO::toOBJ(mesh, preOut);
-//            }
+            stats.processed_edges++;
+//            if (stats.processed_edges % 500 == 0) {
+//            if (stats.processed_edges % 1 == 0 && stats.processed_edges >= 4985 && stats.processed_edges <= 5000) {
+            if (stats.processed_edges % 1 == 0 && stats.processed_edges == 4985) {
+                    std::stringstream press;
+                    press << "../out/beast-collapse" << stats.processed_edges << ".obj";
+                    std::ofstream preOut(press.str());
+                    IO::toOBJ(mesh, preOut);
+            }
         }
 
         UV_pmap uvmap;
@@ -412,7 +390,9 @@ namespace Strategy {
         SM_halfedge_descriptor v0_v1, v1_v0;
         Point_3 p0, p1, pR, pL;
         Point_2 p0_2, p1_2, v0v1_p_2, v1v0_p_2;
+        Point_2 v0_v1_uv, v1_vL_uv, v1_v0_uv, v0_vR_uv;
         std::unordered_map<SM_vertex_descriptor, Point_2> v0P_2, v1P_2, v0_hd_newUV, v1_hd_newUV;
+        std::vector<std::pair<SM_vertex_descriptor, Point_2>> v0_seam_uvs, v1_seam_uvs;
 
         std::unordered_set<SM_vertex_descriptor> v0ds, v1ds;
         std::unordered_set<SM_vertex_descriptor> v0Seams, v1Seams;
