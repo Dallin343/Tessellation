@@ -41,6 +41,11 @@
 #include <CGAL/AABB_face_graph_triangle_primitive.h>
 
 #include <glm/glm.hpp>
+#include <cereal/archives/binary.hpp>
+#include <cereal/types/unordered_map.hpp>
+#include <cereal/types/vector.hpp>
+#include <cereal/types/memory.hpp>
+#include <cereal/types/array.hpp>
 
 typedef CGAL::Simple_cartesian<double>            Kernel;
 typedef Kernel::Plane_3 Plane;
@@ -116,6 +121,7 @@ struct Seam_is_constrained_edge_map
 
 class FeatureVert {
 public:
+    FeatureVert() = default;
     FeatureVert(const SM_halfedge_descriptor &hd, const glm::vec3 &cartCoords, const glm::vec3 &baryCoords,
                 const glm::vec2 &uv) : hd(hd), cartCoords(cartCoords), baryCoords(baryCoords), uv(uv) {}
 
@@ -123,8 +129,24 @@ public:
     glm::vec3 cartCoords;
     glm::vec3 baryCoords;
     glm::vec2 uv;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(hd, cartCoords, baryCoords, uv);
+    }
 };
 typedef std::shared_ptr<FeatureVert> FeatureVertPtr;
+
+enum AssigningSection {
+    ProjectEdge,
+    MoveValidate,
+    MVEdgeCase,
+    ProjectValidate,
+    PVEdgeCase,
+    InterpolateUnmatched,
+    Undone,
+    Never
+};
 
 class TessellatedVert {
 public:
@@ -165,6 +187,13 @@ public:
     bool isInner = false;
     bool anchored = false;
     SM_vertex_descriptor vd;
+    bool isOnSeam = false;
+    AssigningSection assignedBy = Never;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(matchingFeature, origCoords, newCoords, baryCoords, uv, isInner, anchored, vd, isOnSeam, assignedBy);
+    }
 
 private:
     float minVal = std::numeric_limits<float>::min();
@@ -172,25 +201,37 @@ private:
 typedef std::shared_ptr<TessellatedVert> TessVertPtr;
 
 struct TessellatedFace {
+    TessellatedFace()  = default;
     SM_face_descriptor fd;
     std::array<TessVertPtr, 3> vertices;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(fd, vertices);
+    }
 };
 typedef std::shared_ptr<TessellatedFace> TessFacePtr;
 typedef std::unordered_map<SM_vertex_descriptor, TessVertPtr> VDToTessVert;
 
 class ProcessEdge {
 public:
+    ProcessEdge() = default;
     ProcessEdge(const SM_edge_descriptor& ed) : ed(ed) {}
 
     SM_edge_descriptor ed;
     TessVertPtr v0, v1;
     std::vector<TessVertPtr> tessVerts;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(ed, v0, v1, tessVerts);
+    }
 };
 typedef std::shared_ptr<ProcessEdge> ProcessEdgePtr;
 
 class ProcessFace {
 public:
-    ProcessFace() {}
+    ProcessFace() = default;
 
     ProcessFace(const SM_face_descriptor &fd, const std::array<SM_vertex_descriptor, 3> &vds, const std::array<Point_2, 3> &uvs,
                 const std::array<Point_3, 3> &coords) : fd(fd), vds(vds), uvs(uvs), coords(coords) {}
@@ -204,6 +245,11 @@ public:
     std::vector<TessFacePtr> tessFaces;
     ProcessEdgePtr e01, e02, e12;
     VDToTessVert vdToTessVert;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(fd, vds, uvs, coords, tessVerts, innerVerts, tessFaces, e01, e02, e12, vdToTessVert);
+    }
 };
 typedef std::shared_ptr<ProcessFace> ProcessFacePtr;
 
@@ -219,5 +265,17 @@ struct TessLevel {
     unsigned int ol2;
     unsigned int il;
 };
+
+namespace glm {
+    template<class Archive>
+    void serialize(Archive& archive, glm::vec3& m) {
+        archive(m.x, m.y, m.z);
+    }
+
+    template<class Archive>
+    void serialize(Archive& archive, glm::vec2& m) {
+        archive(m.x, m.y);
+    }
+}
 
 #endif //TESSELLATION_MESHIMPL_H

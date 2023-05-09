@@ -29,9 +29,13 @@ namespace Utils {
     Gauss_vertex_pmap CalculateGaussianCurvature(SurfaceMesh& mesh);
     std::optional<Point_3> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree);
 
+    std::string SectionString(AssigningSection section);
+
 
     //Not used right now
     SeamMeshPtr UnwrapMesh(const SurfaceMeshPtr& sm, const std::string& selectionsFile);
+
+
 
 };
 

@@ -129,6 +129,11 @@ namespace CGAL {
         template<class T> bool operator!=(const T&) const = delete;
         template<class T> bool operator<(const T&) const = delete;
 
+        template<class Archive>
+        void serialize(Archive& archive) {
+            archive(idx_);
+        }
+
         /// are two indices equal?
         bool operator==(const SM_Vertex_index& _rhs) const {
             return this->idx_ == _rhs.idx_;
@@ -174,6 +179,11 @@ namespace CGAL {
         template<class T> bool operator!=(const T&) const = delete;
         template<class T> bool operator<(const T&) const = delete;
 
+        template<class Archive>
+        void serialize(Archive& archive) {
+            archive(idx_);
+        }
+
         /// are two indices equal?
         bool operator==(const SM_Halfedge_index& _rhs) const {
             return this->idx_ == _rhs.idx_;
@@ -208,6 +218,11 @@ namespace CGAL {
         template<class T> bool operator==(const T&) const = delete;
         template<class T> bool operator!=(const T&) const = delete;
         template<class T> bool operator<(const T&) const = delete;
+
+        template<class Archive>
+        void serialize(Archive& archive) {
+            archive(idx_);
+        }
 
         /// are two indices equal?
         bool operator==(const SM_Face_index& _rhs) const {
@@ -250,6 +265,11 @@ namespace CGAL {
 
         // compatibility with OpenMesh handles
         size_type idx() const { return (size_type)halfedge_ / 2; }
+
+        template<class Archive>
+        void serialize(Archive& archive) {
+            archive(halfedge_);
+        }
 
         // resets index to be invalid (index=(std::numeric_limits<size_type>::max)())
         void reset() { halfedge_.reset(); }

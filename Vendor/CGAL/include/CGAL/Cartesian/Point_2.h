@@ -50,6 +50,11 @@ public:
   PointC2(const FT &hx, const FT &hy, const FT &hw)
     : base(hx, hy, hw) {}
 
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(base);
+    }
+
   friend void swap(Self& a, Self& b)
 #if !defined(__INTEL_COMPILER) && defined(__cpp_lib_is_swappable)
     noexcept(std::is_nothrow_swappable_v<Vector_2_>)

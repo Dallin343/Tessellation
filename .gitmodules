@@ -4,3 +4,9 @@
 [submodule "Vendor/libigl"]
 	path = Vendor/libigl
 	url = https://github.com/libigl/libigl.git
+[submodule "Vendor/lodepng"]
+	path = Vendor/lodepng
+	url = https://github.com/lvandeve/lodepng
+[submodule "Vendor/cereal"]
+	path = Vendor/cereal
+	url = https://github.com/USCiLab/cereal

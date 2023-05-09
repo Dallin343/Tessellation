@@ -3,11 +3,37 @@
 //
 
 #include "IO.h"
+#include "lodepng.h"
 
 namespace IO {
-    void toOBJ(const SurfaceMesh &sm, std::ostream &out)  {
+    template<typename T, typename V>
+    void writeMap(const std::unordered_map<T, V>& map, std::ostream& os) {
+        for (auto const& [key, val] : map) {
+            os << key << " " << val << "\n";
+        }
+
+        os.flush();
+    }
+
+    template<typename T, typename V>
+    std::unordered_map<T, V> readMap(std::ifstream& in) {
+        std::unordered_map<T, V> map;
+        T key;
+        V val;
+
+        while (in >> key >> val) {
+            map.insert({key, val});
+        }
+
+        return map;
+    }
+
+    void toOBJ(const SurfaceMesh &sm, std::ostream &out, const std::string& outVD, const std::string& outHD, const std::string& outSeams)  {
         std::unordered_map<SM_vertex_descriptor, unsigned int> VDtoVIdx;
         std::unordered_map<SM_halfedge_descriptor, unsigned int> HDtoVtIdx;
+        VdHdMap vdPairsToHD;
+        std::vector<std::pair<SM_vertex_descriptor, SM_vertex_descriptor>> eSeams;
+
         std::vector<Point_3> v;
         std::vector<Point_2> vt;
         std::vector<Vector> vn;
@@ -19,14 +45,20 @@ namespace IO {
 
         auto uvmap = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
+        auto vSeamMap = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
+        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
 
         //move vertices pos to v
+        std::vector<std::tuple<SM_vertex_descriptor, SM_vertex_descriptor, SM_halfedge_descriptor>> vdPairsToHDVec;
         for (auto vert : sm.vertices()) {
+
             VDtoVIdx.insert({vert, v.size()});
             v.push_back(sm.point(vert));
 
             std::unordered_map<Point_2, unsigned int> uvToIdx;
             for (const auto& hd : halfedges_around_source(vert, sm)) {
+                vdPairsToHDVec.emplace_back(vert, sm.target(hd), hd);
+
                 auto uv = get(uvmap, hd);
                 if (uvToIdx.find(uv) != uvToIdx.end()) {
                     //already processed this uv
@@ -39,6 +71,14 @@ namespace IO {
                     uvToIdx.insert({uv, idx});
                     vt.push_back(uv);
                 }
+            }
+        }
+
+        for (auto edge : sm.edges()) {
+            if (get(eSeamMap, edge)) {
+                auto src = sm.source(sm.halfedge(edge));
+                auto tgt = sm.target(sm.halfedge(edge));
+                eSeams.emplace_back(src, tgt);
             }
         }
 
@@ -75,12 +115,84 @@ namespace IO {
             out << "f" << fStr << "\n";
         }
         out.flush();
+
+        if (!outVD.empty()) {
+            VdMap writeVDToIdx;
+            for (const auto& [vd, vIdx] : VDtoVIdx) {
+                writeVDToIdx.insert({vd.idx(), vIdx});
+            }
+            std::ofstream of(outVD);
+            writeMap(writeVDToIdx, of);
+        }
+
+        if (!outHD.empty()) {
+            for (const auto& [src, target, hd] : vdPairsToHDVec) {
+                auto newSrc = VDtoVIdx.at(src);
+                auto newTarget = VDtoVIdx.at(target);
+                vdPairsToHD.insert({key(newSrc, newTarget), hd.idx()});
+            }
+            std::ofstream of(outHD);
+            writeMap(vdPairsToHD, of);
+        }
+
+        if (!outSeams.empty()) {
+            std::ofstream of(outSeams);
+            for (const auto& [src, tgt] : eSeams) {
+                auto newSrc = VDtoVIdx.at(src);
+                auto newTarget = VDtoVIdx.at(tgt);
+                of << newSrc << " " << newTarget << "\n";
+            }
+            of.flush();
+        }
+    }
+
+    std::tuple<SurfaceMeshPtr, VdMap, VdHdMap> fromOBJ(const std::string& filename, const std::string& vdMapFilename, const std::string& hdMapFilename, const std::string& seamsFilename) {
+        SurfaceMeshPtr surfaceMesh = LoadMesh(filename);
+        ReadUV(surfaceMesh, filename);
+
+        auto fNorms = surfaceMesh->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
+        auto vNorms = surfaceMesh->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
+        CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
+
+        std::ifstream vdIn(vdMapFilename);
+        VdMap vdMap = readMap<unsigned int, unsigned int>(vdIn);
+
+        std::ifstream hdIn(hdMapFilename);
+        VdHdMap vdHdMap = readMap<unsigned long, unsigned int>(hdIn);
+
+        if (!seamsFilename.empty()) {
+            auto vSeamMap = surfaceMesh->add_property_map<SM_vertex_descriptor, bool>("v:on_seam", false).first;
+            auto eSeamMap = surfaceMesh->add_property_map<SM_edge_descriptor, bool>("e:on_seam", false).first;
+            std::ifstream seamsIn(seamsFilename);
+            unsigned int src, tgt;
+
+            while (seamsIn >> src >> tgt) {
+                auto sVD = SM_vertex_descriptor(src), tVD = SM_vertex_descriptor(tgt);
+                put(vSeamMap, sVD, true);
+                put(vSeamMap, tVD, true);
+
+                auto hd = surfaceMesh->halfedge(sVD, tVD);
+                if (!hd) {
+                    std::cout << "Halfedge does not exist.\n";
+                }
+                else {
+                    auto e = surfaceMesh->edge(hd);
+                    put(eSeamMap, e, true);
+                }
+            }
+        }
+
+        return std::make_tuple(surfaceMesh, vdMap, vdHdMap);
     }
 
     std::pair<SurfaceMeshPtr, SeamMeshPtr> fromOBJ(const std::string& filename, const std::string& seamFilename) {
         SurfaceMeshPtr surfaceMesh = LoadMesh(filename);
         ReadUV(surfaceMesh, filename);
         SeamMeshPtr seamMesh = AddSeams(surfaceMesh, seamFilename);
+        auto fNorms = surfaceMesh->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
+        auto vNorms = surfaceMesh->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
+        CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
+
         return std::make_pair(surfaceMesh, seamMesh);
     }
 
@@ -166,6 +278,9 @@ namespace IO {
         // The seam mesh
         auto mesh = std::make_shared<SeamMesh>(*sm, seam_edge_pm, seam_vertex_pm);
 
+        if (selectionsFile.empty()) {
+            return mesh;
+        }
         // Add the seams to the seam mesh
         SM_halfedge_descriptor bhd = mesh->add_seams(selectionsFile.c_str());
 
@@ -176,18 +291,44 @@ namespace IO {
         return mesh;
     }
 
-    void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, unsigned int max, const std::string& file) {
+    void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, float offsetVal, unsigned int max, const std::string& file) {
+        std::cout << "Writing texture...\n";
         std::ofstream out(file);
-        out << "P6\n" << w << "\n" << h << "\n" << max << "\n";
-        for (int i = 0; i < w; i++) {
-            for (int j = 0; j < h; j++) {
-                auto col = tex[i * w + j];
-                char r = (char) floor(col.r);
-                char g = (char) floor(col.g);
-                char b = (char) floor(col.b);
-                out << r << g << b;
-            }
-            out << "\n";
+        const float maxOffset = (float)max + offsetVal;
+        out << "P6\n" << w << "\n" << h << "\n255\n";// << max << "\n";
+//        if (max < 256) {
+//            std::cout << "Using single byte storage. (max = " << max << ")\n";
+//        }
+//        else {
+//            std::cout << "Using double byte storage. (max = " << max << ")\n";
+//        }
+        for (const auto& pixel : tex) {
+            auto r = pixel.r, g = pixel.g, b = pixel.b;
+
+//            auto r2 = floor(255.0f * (r / maxOffset));
+//            auto g2 = floor(255.0f * (g / maxOffset));
+//            auto b2 = floor(255.0f * (b / maxOffset));
+//
+//            if (r2 > 72.0f || g2 > 72.0f || b2 > 72.0f ) {
+//                int x = 1;
+//            }
+
+            out << (unsigned char)floor(r);
+            out << (unsigned char)floor(g);
+            out << (unsigned char)floor(b);
+
+//            if (max < 256) {
+//                //Only one byte stored.
+//                out << (unsigned char)floor(pixel.r);
+//                out << (unsigned char)floor(pixel.g);
+//                out << (unsigned char)floor(pixel.b);
+//            }
+//            else {
+//                //Two bytes stored
+//                out << (uint16_t) floor(pixel.r);
+//                out << (uint16_t) floor(pixel.g);
+//                out << (uint16_t) floor(pixel.b);
+//            }
         }
         out.flush();
     }

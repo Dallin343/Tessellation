@@ -12,6 +12,8 @@ include_directories(
         Vendor/eigen
         Vendor/CGAL/include
         Vendor/indicators
+        Vendor/lodepng
+        Vendor/cereal/include
         Source
 )
 
@@ -56,7 +58,15 @@ add_executable(Tessellation
         Source/Strategy.cpp
         Source/Strategy.h
         Source/Utils.cpp
-        Source/Utils.h Source/Prepare.cpp Source/Prepare.h Source/OGLMesh.cpp Source/OGLMesh.h Source/stb.h)
+        Source/Utils.h
+        Source/Prepare.cpp
+        Source/Prepare.h
+        Source/OGLMesh.cpp
+        Source/OGLMesh.h
+        Source/stb.h
+        Vendor/lodepng/lodepng.cpp
+        Vendor/lodepng/lodepng.h
+        )
 
 if(CGAL_Qt5_FOUND)
 target_link_libraries(Tessellation PRIVATE

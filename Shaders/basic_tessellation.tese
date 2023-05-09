@@ -32,8 +32,8 @@ void main()
 
     vec2 texCoord = u * t0 + v * t1 + w * t2;
     vec4 vProject = texture(vProjectionMap, texCoord);
-    int u_int = int(trunc(texCoord.x * float(texWidth) - 0.5));
-    int v_int = int(trunc(texCoord.y * float(texHeight) - 0.5));
+    int u_int = int(trunc(texCoord.x * float(texWidth)));
+    int v_int = int(trunc(texCoord.y * float(texHeight)));
     vec4 test = texelFetch(vProjectionMap, ivec2(u_int, v_int), 0);
 
     // ----------------------------------------------------------------------
@@ -50,17 +50,26 @@ void main()
     // bilinearly interpolate position coordinate across patch
     vec4 p = p0*u + p1*v + p2*w;
 //    p += vec4(vProject.xyz, 0.0);
-//    p += vec4(test.xyz, 0.0);
+    float testLen = length(test.xyz);
+    float thresh = 60.0;
+//    if (testLen < thresh) {
+        p += vec4(test.xyz, 0.0);
+//    }
+
 
     vec4 c0 = VertexColor[0];
     vec4 c1 = VertexColor[1];
     vec4 c2 = VertexColor[2];
 //    vertexColor = normalize(vec4(u, v, w, 1.0));
-//    if (test.xyz == vec3(0.0, 0.0, 0.0)) {
-//        vertexColor = vec4(0.0, 0.0, 0.0, 1.0);
-//    } else {
+/*    if (test.xyz == vProject.xyz) {
+        vertexColor = vec4(0.0, 1.0, 0.0, 1.0);
+    } else */if (test.xyz == vec3(0.0, 0.0, 0.0)) {
+        vertexColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+//        vertexColor = vec4(0.0, 0.0, 0.3, 1.0);
         vertexColor = c0*u + c1*v + c2*w;
-//    }
+//        vertexColor = normalize(vec4(test.xyz, 1.0));
+    }
 
     // ----------------------------------------------------------------------
     // output patch point position in clip space

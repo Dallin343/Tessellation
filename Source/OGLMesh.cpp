@@ -14,7 +14,6 @@ OGLMesh::OGLMesh(const Prepare::OGLData& meshData) {
         this->indices.push_back(face.v1);
         this->indices.push_back(face.v2);
     }
-    this->setupMesh();
 }
 
 void OGLMesh::setupMesh() {
@@ -44,9 +43,14 @@ void OGLMesh::setupMesh() {
     glBindVertexArray(0);
 }
 
-void OGLMesh::draw(const Shader &shader) const {
+void OGLMesh::draw(const Shader &shader, Type drawType) const {
     glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, nullptr);
+    if (drawType == Patches) {
+        glDrawElements(GL_PATCHES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, nullptr);
+    } else if (drawType == Triangles) {
+        glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, nullptr);
+    }
+
     glBindVertexArray(0);
 }
 

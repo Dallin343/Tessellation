@@ -15,7 +15,7 @@
 #include "Strategy.h"
 #include "Prepare.h"
 #include "OGLMesh.h"
-//#include <indicators.hpp>
+#include <indicators.hpp>
 
 #define DRAW_STEPS false
 #define DRAW_T false
@@ -34,6 +34,11 @@ float lastX = WIDTH / 2.0f;
 float lastY = HEIGHT / 2.0f;
 bool firstMouse = true;
 
+struct ViewSettings {
+    bool showLines = false;
+};
+
+ViewSettings viewSettings;
 
 void processInput(GLFWwindow *window);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -43,124 +48,304 @@ static void GLFWErrorCallback(int error, const char* description) {
     std::cout << "GLFW Error " << error << " " << description << std::endl;
 }
 
-constexpr unsigned int NUM_TESS_LEVELS = 3;
+constexpr unsigned int NUM_TESS_LEVELS = 1;
 typedef std::array<TessLevel, NUM_TESS_LEVELS> TessLevels;
 TessLevels tessLevels {{
-                               {1, 1, 1, 1}, // No tessellation
-                               {10, 10, 10, 10},
-                               {5, 5, 5, 5}
+//                               {1, 1, 1, 1}, // No tessellation
+                               {3, 3, 3, 3},
+//                               {10, 10, 10, 10}
                        }};
 
 int main(int argc, char** argv)
 {
-//    indicators::show_console_cursor(false);
+    indicators::show_console_cursor(false);
 
-    const std::string filename = (argc>1) ? argv[1] : CGAL::data_file_path("../Models/beastcorrected.obj");
-    const std::string simplifiedFilename = CGAL::data_file_path("../out/beast-simplified.obj");
-    const std::string selectionsFilename = CGAL::data_file_path("../Models/beastcorrected.selection.txt");
+    const bool PRE_SIMPLIFIED = true;
+    const bool HAS_SEAM_SELECTIONS = true;
+    const bool EXPORT_TESSELLATED_MESH = true;
+    const bool EXPORT_PROCESSED_FACES = true;
+    const bool IMPORT_PROCESSED_FACES = false;
+    const bool EXPORT_TEXTURE = false;
+
+    int percent = 10;
+    float percentFloat = (float) percent / 100.0f;
+    const std::string percentStr = std::to_string(percent);
+
+    const std::string modelsPath = "../Models/";
+    const std::string outPath = "../out/";
+    const std::string modelName = "beast";
+    const std::string modelBase = modelsPath + modelName;
+    const std::string outSimplifiedBase = outPath + modelName + "-simplified-" + percentStr;
+    const std::string inSimplifiedBase = modelBase + "-simplified-" + percentStr;
+    const std::string filename = (argc>1) ? argv[1] : CGAL::data_file_path(modelBase + ".obj");
+    const std::string selectionsFilename = !PRE_SIMPLIFIED ? CGAL::data_file_path(modelBase + ".selection.txt") : "";
+    const std::string simplifiedSelectionsFilename = CGAL::data_file_path(inSimplifiedBase + ".selection.txt");
+
+    const std::string outSimplifiedFilename = CGAL::data_file_path(outSimplifiedBase + ".obj");
+    const std::string outHdFilename = CGAL::data_file_path(outSimplifiedBase + "-hd.txt");
+    const std::string outVdFilename = CGAL::data_file_path(outSimplifiedBase + "-vd.txt");
+    const std::string outSeamsFilename = CGAL::data_file_path(outSimplifiedBase + "-seams.txt");
+
+    const std::string inSimplifiedFilename = CGAL::data_file_path(inSimplifiedBase + ".obj");
+    const std::string inHdFilename = CGAL::data_file_path(inSimplifiedBase + "-hd.txt");
+    const std::string inVdFilename = CGAL::data_file_path(inSimplifiedBase + "-vd.txt");
+    const std::string inSeamsFilename = CGAL::data_file_path(inSimplifiedBase + "-seams.txt");
 
     std::cout << "Loading model from file..." << "\n";
     SurfaceMeshPtr sm, highResMesh;
     SeamMeshPtr mesh, highResSeamMesh;
-    std::tie(sm, mesh) = IO::fromOBJ(filename, selectionsFilename);
-    std::tie(highResMesh, highResSeamMesh) = IO::fromOBJ(filename, selectionsFilename);
-
-    auto gaussMap = Utils::CalculateGaussianCurvature(*highResMesh);
-//    auto baryMap = sm->add_property_map<SM_face_descriptor, Vertex_bary_map>("f:bary").first;
-
-//    std::cout << "Unwrapping model with Orbifold-Tutte..." << "\n";
-//    SeamMeshPtr mesh = UnwrapMesh(sm, selectionsFilename);
-
-    auto highResUVMap = sm->property_map<SM_halfedge_descriptor, Point_2>("bh:uv").first;
-    auto uvmap = sm->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+    SurfaceMesh::Property_map<SM_halfedge_descriptor, Point_2> highResUVMap, uvmap;
+    SurfaceMesh::Property_map<SM_face_descriptor, Vector> fNorms;
+    SurfaceMesh::Property_map<SM_vertex_descriptor, Vector> vNorms;
+    Gauss_vertex_pmap gaussMap;
+    IO::VdHdMap vdHdMap;
+    IO::VdMap vdPairMap;
 
     std::vector<std::pair<Point_2, SM_halfedge_descriptor>> points;
-    points.reserve(sm->num_halfedges());
 
-    for (auto hd : sm->halfedges()) {
-        points.emplace_back(get(uvmap, hd), hd);
+    if (!PRE_SIMPLIFIED) {
+        std::tie(sm, mesh) = IO::fromOBJ(filename, selectionsFilename);
+        std::tie(highResMesh, highResSeamMesh) = IO::fromOBJ(filename, selectionsFilename);
+    } else {
+        if (HAS_SEAM_SELECTIONS) {
+            std::tie(sm, mesh) = IO::fromOBJ(inSimplifiedFilename, simplifiedSelectionsFilename);
+        } else {
+            std::tie(sm, vdPairMap, vdHdMap) = IO::fromOBJ(inSimplifiedFilename, inVdFilename, inHdFilename, inSeamsFilename);
+        }
+        std::tie(highResMesh, highResSeamMesh) = IO::fromOBJ(filename, selectionsFilename);
     }
 
-    std::cout << "Simplifying model with Garland-Heckbert..." << "\n";
-    auto fNorms = sm->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
-    auto vNorms = sm->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
-    Strategy::collapseMesh<Classic_plane>(mesh, sm, 0.1);
+    fNorms = sm->property_map<SM_face_descriptor, Vector>("f:normal").first;
+    vNorms = sm->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
 
-    std::cout << "Calculating normals..." << "\n";
-    CGAL::Polygon_mesh_processing::compute_normals(*sm, vNorms, fNorms);
-    std::ofstream simpleOut(simplifiedFilename);
-    IO::toOBJ(*sm, simpleOut);
-    return EXIT_SUCCESS;
+    struct TessLevelData {
+        SurfaceMeshPtr mesh;
+        TessEdgeMap processedEdges;
+        ProcessFaceMap processedFaces;
+        VertSet interpolateVerts;
+    };
 
-//    std::ofstream testOut("../Models/beast-export-test.obj");
-//    IO::toOBJ(*sm, testOut);
+    std::array<TessLevelData, NUM_TESS_LEVELS> allTessMeshes;
+    for (int i = 0; i < NUM_TESS_LEVELS; i++) {
+        allTessMeshes.at(i) = {};
+    }
 
-    std::cout << "Creating AABB Tree..." << "\n";
-    Tree aabbTree(highResMesh->faces().begin(), highResMesh->faces().end(), *highResMesh);
+    if (!IMPORT_PROCESSED_FACES)
+    {
+        gaussMap = Utils::CalculateGaussianCurvature(*highResMesh);
 
-    std::cout << "Finding feature vertices in simplified triangles..." << "\n";
-    Point2Set pointSet;
-    pointSet.insert(points.begin(), points.end());
+        uvmap = sm->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        highResUVMap = highResMesh->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
 
-    SurfaceMesh sm_copy = SurfaceMesh(*sm);
+        points.reserve(highResMesh->num_halfedges());
 
-    auto fColor = sm_copy.add_property_map<SM_face_descriptor, CGAL::IO::Color>("f:color", CGAL::IO::Color(0x44, 0x44, 0x44)).first;
-
-    TessEdgeMap processedEdges;
-    ProcessFaceMap processedFaces;
-    VertSet interpolateVerts;
-    Strategy::Stats stats;
-//    indicators::BlockProgressBar bar {
-//            indicators::option::BarWidth{80},
-//            indicators::option::ForegroundColor{indicators::Color::white},
-//            indicators::option::FontStyles{
-//                    std::vector<indicators::FontStyle>{indicators::FontStyle::bold}},
-//            indicators::option::MaxProgress{sm->faces().size()}
-//    };
-
-    for (SM_face_descriptor fd : sm->faces()) {
-        auto processFace = std::make_shared<ProcessFace>();
-        processFace->fd = fd;
-
-        unsigned int arrIdx = 0;
-        for (SM_halfedge_descriptor hd: sm->halfedges_around_face(sm->halfedge(fd))) {
-            processFace->uvs.at(arrIdx) = get(uvmap, hd);
-            processFace->coords.at(arrIdx) = sm->point(sm_copy.source(hd));
-            processFace->vds.at(arrIdx) = sm->source(hd);
-            arrIdx++;
+        for (auto hd: highResMesh->halfedges()) {
+            points.emplace_back(get(highResUVMap, hd), hd);
         }
 
-        processedFaces.insert({fd, processFace});
+        if (!PRE_SIMPLIFIED) {
+            std::cout << "Simplifying model with Garland-Heckbert..." << "\n";
+            Strategy::collapseMesh<Classic_plane>(mesh, sm, percentFloat);
 
-        auto featureVerts = Strategy::extractFeatureVertices(pointSet, processFace, *highResMesh, stats);
+            std::cout << "Calculating normals..." << "\n";
+            CGAL::Polygon_mesh_processing::compute_normals(*sm, vNorms, fNorms);
+
+            std::ofstream simpleOut(outSimplifiedFilename);
+            IO::toOBJ(*sm, simpleOut, outVdFilename, outHdFilename, outSeamsFilename);
+            return EXIT_SUCCESS;
+        }
+
+        std::cout << "Creating AABB Tree..." << "\n";
+        Tree aabbTree(highResMesh->faces().begin(), highResMesh->faces().end(), *highResMesh);
+
+        std::cout << "Optimizing simplified mesh for tessellation..." << "\n";
+        Point2Set pointSet;
+        pointSet.insert(points.begin(), points.end());
+
+        Strategy::Stats stats;
+        using namespace indicators;
+        ProgressBar tessLevelsBar{
+                option::BarWidth{80},
+                option::Start{"["},
+                option::Fill{"#"},
+                option::ForegroundColor{Color::white},
+                option::FontStyles{
+                        std::vector<FontStyle>{FontStyle::bold}},
+                option::MaxProgress{NUM_TESS_LEVELS}
+        };
+
+        DynamicProgress<ProgressBar> bars{tessLevelsBar};
+        bars.set_option(option::HideBarWhenComplete(true));
+
+        std::vector<std::string> tessBarStates{
+                "Processing Faces",
+                "Calculating Norms",
+                "Exporting Model",
+        };
+
+        for (int i = 0; i < NUM_TESS_LEVELS; i++) {
+            ProgressBar faceBar{
+                    option::BarWidth{80},
+                    option::Start{"["},
+                    option::Fill{"#"},
+                    option::ForegroundColor{Color::yellow},
+                    option::FontStyles{
+                            std::vector<FontStyle>{FontStyle::bold}},
+                    option::MaxProgress{sm->faces().size()}
+            };
+            bars.push_back(faceBar);
+
+            auto &currTessLevel = allTessMeshes.at(i);
+            stats.clear();
+
+            SurfaceMeshPtr sm_copy = std::make_shared<SurfaceMesh>(*sm);
+
+            int state = 0;
+            bars[0].set_option(option::PostfixText{
+                    std::to_string(i) + "/" + std::to_string(NUM_TESS_LEVELS) + " [" + tessBarStates.at(state) + "]"
+            });
+
+            auto fColor = sm_copy->add_property_map<SM_face_descriptor, CGAL::IO::Color>("f:color",
+                                                                                         CGAL::IO::Color(0x44, 0x44,
+                                                                                                         0x44)).first;
+            int faceCount = 1;
+            for (SM_face_descriptor fd: sm->faces()) {
+                if (faceCount == 734) {
+                    int x = 1;
+
+                }
+                auto processFace = std::make_shared<ProcessFace>();
+                processFace->fd = fd;
+
+                unsigned int arrIdx = 0;
+                for (SM_halfedge_descriptor hd: sm->halfedges_around_face(sm->halfedge(fd))) {
+                    processFace->uvs.at(arrIdx) = get(uvmap, hd);
+                    processFace->coords.at(arrIdx) = sm->point(sm_copy->source(hd));
+                    processFace->vds.at(arrIdx) = sm->source(hd);
+                    arrIdx++;
+                }
+
+                currTessLevel.processedFaces.insert({fd, processFace});
+
+                auto featureVerts = Strategy::extractFeatureVertices(pointSet, processFace, *highResMesh, stats);
 
 
-        Strategy::tessellateFace(processFace, sm_copy, tessLevels.at(2), processedEdges, stats);
-        Strategy::projectEdgeVerts(processFace, sm_copy, aabbTree, interpolateVerts, processedEdges, stats);
-        Strategy::minBiGraphMatch(processFace, featureVerts, stats);
-        Strategy::moveAndValidate(processFace, sm_copy, *sm, gaussMap, stats);
-        Strategy::projectAndValidate(processFace, sm_copy, *sm, aabbTree, interpolateVerts, stats);
+                Strategy::tessellateFace(processFace, *sm_copy, tessLevels.at(i), currTessLevel.processedEdges, stats);
+                Strategy::projectEdgeVerts(processFace, *sm_copy, aabbTree, currTessLevel.interpolateVerts,
+                                           currTessLevel.processedEdges, stats);
+                Strategy::minBiGraphMatch(processFace, featureVerts, stats);
+                Strategy::moveAndValidate(processFace, *sm_copy, *highResMesh, gaussMap, stats);
+                Strategy::projectAndValidate(processFace, *sm_copy, *highResMesh, aabbTree, currTessLevel.interpolateVerts,
+                                             stats);
 
-//        bar.tick();
-//        if (pass_count % 1000 == 0) {
-//            CGAL::draw(sm_copy);
-//        }
+                bars[i + 1].set_option(option::PostfixText{
+                        std::to_string(faceCount++) + "/" + std::to_string(sm->faces().size())
+                });
+                bars[i + 1].tick();
+            }
+
+            if (!currTessLevel.interpolateVerts.empty()) {
+                Strategy::interpolateUnmatched(currTessLevel.interpolateVerts, *sm_copy);
+            }
+
+            bars[i + 1].mark_as_completed();
+            bars[0].set_option(option::PostfixText{
+                    std::to_string(i) + "/" + std::to_string(NUM_TESS_LEVELS) + " [" + tessBarStates.at(++state) + "]"
+            });
+
+            allTessMeshes.at(i).mesh = sm_copy;
+
+            stats.total_vertices = sm_copy->number_of_vertices();
+            for (const auto& [fd, face] : currTessLevel.processedFaces) {
+                for (const auto& vert : face->innerVerts) {
+                    if (vert->isAssigned()) {
+                        stats.moved_vertices++;
+                    }
+                }
+            }
+
+            auto newFNorms = sm_copy->property_map<SM_face_descriptor, Vector>("f:normal").first;
+            auto newVNorms = sm_copy->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
+            CGAL::Polygon_mesh_processing::compute_normals(*sm_copy, newVNorms, newFNorms);
+
+            bars[0].set_option(option::PostfixText{
+                    std::to_string(i) + "/" + std::to_string(NUM_TESS_LEVELS) + " [" + tessBarStates.at(++state) + "]"
+            });
+
+            if (EXPORT_TESSELLATED_MESH) {
+                std::ofstream finalOut("../out/beast-export-" + std::to_string(i) + ".obj");
+                IO::toOBJ(*sm_copy, finalOut, "", "", "");
+            }
+
+            if (EXPORT_PROCESSED_FACES) {
+                auto tLevel = tessLevels.at(i);
+
+                std::stringstream tessLevelStr;
+                tessLevelStr << i << "-" << tLevel.ol0 << "-" << tLevel.ol1 << "-" << tLevel.ol2 << "-" << tLevel.il;
+                std::ofstream processedFacesOut(outSimplifiedBase + "-processed_faces-" + tessLevelStr.str() + ".bin", std::ios::binary);
+
+                cereal::BinaryOutputArchive oarchive(processedFacesOut);
+                oarchive(currTessLevel.processedFaces);
+            }
+
+            bars[0].tick();
+        }
+        bars[0].mark_as_completed();
+
+        indicators::show_console_cursor(true);
+        stats.print();
     }
-//    bar.mark_as_completed();
+    else {
 
-//    CGAL::draw(sm_copy);
-    stats.print();
+        CGAL::Polygon_mesh_processing::compute_normals(*sm, vNorms, fNorms);
+        for (int i = 0; i < NUM_TESS_LEVELS; i++) {
+            auto tLevel = tessLevels.at(i);
+            auto &currTessLevel = allTessMeshes.at(i);
 
-    auto newFNorms = sm_copy.property_map<SM_face_descriptor, Vector>("f:normal").first;
-    auto newVNorms = sm_copy.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
-    CGAL::Polygon_mesh_processing::compute_normals(sm_copy, newVNorms, newFNorms);
+            std::stringstream tessLevelStr;
+            tessLevelStr << i << "-" << tLevel.ol0 << "-" << tLevel.ol1 << "-" << tLevel.ol2 << "-" << tLevel.il;
+            std::ifstream processedFacesIn(outSimplifiedBase + "-processed_faces-" + tessLevelStr.str() + ".bin", std::ios::binary);
 
-    std::ofstream finalOut("../out/beast-export.obj");
-    IO::toOBJ(sm_copy, finalOut);
+            cereal::BinaryInputArchive iarchive(processedFacesIn);
+            iarchive(currTessLevel.processedFaces);
+        }
 
-    std::cout << "Done\n" << "Number of interpolated Vertices: " << interpolateVerts.size();
-    std::cout << "\nNumber of edges in original: " << sm->number_of_edges() << std::endl;
-//    indicators::show_console_cursor(true);
+    }
+
+    std::unordered_map<AssigningSection, int> totalAssigned = {
+            {ProjectEdge, 0},
+            {MoveValidate, 0},
+            {MVEdgeCase, 0},
+            {ProjectValidate, 0},
+            {PVEdgeCase, 0},
+            {Undone, 0},
+            {Never, 0},
+            {InterpolateUnmatched, 0}
+    };
+
+    for (auto& [fd, face] : allTessMeshes.at(0).processedFaces) {
+        for (auto& vert : face->tessVerts) {
+            totalAssigned.at(vert->assignedBy) += 1;
+        }
+    }
+
+    for (auto [key, val] : totalAssigned) {
+        std::cout << Utils::SectionString(key) << ": " << val << "\n";
+    }
+
+    Prepare::OGLData modelData = Prepare::toOGL(*sm);
+    auto oglMesh = new OGLMesh(modelData);
+
+    Prepare::OGLData highResModelData = Prepare::toOGL(*highResMesh);
+    auto highResOglMesh = new OGLMesh(highResModelData);
+
+    //Texture Setup
+    int width=8192, height=8192, maxVal;
+    float offset;
+    auto tex = Prepare::createTexture(*sm, allTessMeshes.at(0).processedFaces, width, height, offset, maxVal);
+    if (EXPORT_TEXTURE) {
+        IO::WriteTexture(tex, width, height, offset, maxVal, "../out/tex.ppm");
+    }
 
     glfwInit();
     glfwSetErrorCallback(GLFWErrorCallback);
@@ -191,19 +376,15 @@ int main(int argc, char** argv)
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
-    Prepare::OGLData modelData = Prepare::toOGL(*sm);
-    auto oglMesh = new OGLMesh(modelData);
+    oglMesh->setupMesh();
+    highResOglMesh->setupMesh();
+//    int width, height, nrChannels;
+//    unsigned char *tex = stbi_load("../Models/testTexture.png", &width, &height, &nrChannels, 0);
+//    if (!tex) {
+//        std::cout << "Failed to load texture" << std::endl;
+//    }
 
-    //Texture Setup
-//    int width=4096, height=4096, maxVal;
-//    auto tex = Prepare::createTexture(*sm, processedFaces, width, height, maxVal);
-//    IO::WriteTexture(tex, width, height, maxVal, "../out/tex.ppm");
-    int width, height, nrChannels;
-    unsigned char *tex = stbi_load("../Models/testTexture.png", &width, &height, &nrChannels, 0);
-    if (!tex) {
-        std::cout << "Failed to load texture" << std::endl;
-    }
-
+//    return EXIT_SUCCESS;
     unsigned int texture;
 
     glGenTextures(1, &texture);
@@ -214,19 +395,27 @@ int main(int argc, char** argv)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 //    glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
-    stbi_image_free(tex);
+//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
+//    stbi_image_free(tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, tex.data());
 
     // Load Shader
-    auto default_shader = Shader(
-            "../Shaders/default_vertex.glsl",
-            "../Shaders/default_frag.glsl"/*,
+    auto tess_shader = Shader(
+            "../Shaders/tess_vertex.glsl",
+            "../Shaders/tess_frag.glsl",
             "../Shaders/basic_tessellation.tesc",
-            "../Shaders/basic_tessellation.tese"*/
+            "../Shaders/basic_tessellation.tese"
             );
 
-    glm::mat4 model = glm::mat4(1.0f);
+    auto plain_shader = Shader(
+            "../Shaders/default_vertex.glsl",
+            "../Shaders/default_frag.glsl"
+    );
+
+    glm::mat4 model = glm::mat4(1.0f), plain_model(1.0f);
     model = glm::rotate(glm::scale(model, glm::vec3{0.8f, 0.8f, 0.8f}), 45.0f, glm::vec3{0.0f, 1.0f, 0.0f});
+    plain_model = glm::rotate(glm::scale(plain_model, glm::vec3{0.8f, 0.8f, 0.8f}), 45.0f, glm::vec3{0.0f, 1.0f, 0.0f});
+
 
     glm::mat4 projection;
     projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 10000.0f);
@@ -243,24 +432,40 @@ int main(int argc, char** argv)
         glEnable(GL_DEPTH_TEST);
         glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-//        glPatchParameteri(GL_PATCH_VERTICES, 3);
+        glPatchParameteri(GL_PATCH_VERTICES, 3);
 
-//        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+        if (viewSettings.showLines) {
+            glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+        }
+        else {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
 
-        default_shader.use();
-        default_shader.setMat4("model", model);
-        default_shader.setMat4("view", camera.GetViewMatrix());
-        default_shader.setMat4("projection", projection);
-        default_shader.setInt("vProjectionMap", 0);
-        default_shader.setInt("texWidth", width);
-        default_shader.setInt("texHeight", height);
+
+        tess_shader.use();
+        tess_shader.setMat4("model", model);
+        tess_shader.setMat4("view", camera.GetViewMatrix());
+        tess_shader.setMat4("projection", projection);
+        tess_shader.setInt("vProjectionMap", 0);
+        tess_shader.setInt("texWidth", width);
+        tess_shader.setInt("texHeight", height);
 
         glBindTexture(GL_TEXTURE_2D, texture);
 //        glBindVertexArray(VAO);
 //        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr);
-        oglMesh->draw(default_shader);
-        //dragon_model->Draw(default_shader);
-        //bunny_model->Draw(default_shader);
+        oglMesh->draw(tess_shader, OGLMesh::Patches);
+
+        plain_shader.use();
+        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{150.0f, 0.f, 0.f}));
+        plain_shader.setMat4("view", camera.GetViewMatrix());
+        plain_shader.setMat4("projection", projection);
+
+        oglMesh->draw(plain_shader, OGLMesh::Triangles);
+
+        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{-150.0f, 0.f, 0.f}));
+        highResOglMesh->draw(plain_shader, OGLMesh::Triangles);
+        //dragon_model->Draw(tess_shader);
+        //bunny_model->Draw(tess_shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -271,6 +476,7 @@ int main(int argc, char** argv)
     return 0;
 }
 
+auto m_key_state = GLFW_RELEASE;
 void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -284,6 +490,15 @@ void processInput(GLFWwindow *window)
         camera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         camera.ProcessKeyboard(RIGHT, deltaTime);
+
+    if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS)
+        m_key_state = GLFW_PRESS;
+    else if (glfwGetKey(window, GLFW_KEY_M) == GLFW_RELEASE && m_key_state == GLFW_PRESS) {
+        viewSettings.showLines = !viewSettings.showLines;
+        m_key_state = GLFW_RELEASE;
+    }
+
+
 }
 
 void mouse_callback(GLFWwindow* window, double xposIn, double yposIn)
@@ -313,123 +528,3 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 {
     camera.ProcessMouseScroll(static_cast<float>(yoffset));
 }
-
-//int main(int argc, char** argv)
-//{
-//    CGAL::Timer task_timer;
-//    task_timer.start();
-//
-//    const std::string filename = (argc>1) ? argv[1] : CGAL::data_file_path("../Models.dradon.obj");
-//
-//    SurfaceMesh sm;
-//    if(!CGAL::IO::read_polygon_mesh(filename, sm))
-//    {
-//        std::cerr << "Invalid input file." << std::endl;
-//        return EXIT_FAILURE;
-//    }
-//
-//    // Selection file that contains the cones and possibly the path between cones
-//    // -- the first line for the cones indices
-//    // -- the second line must be empty
-//    // -- the third line optionally provides the seam edges indices as 'e11 e12 e21 e22 e31 e32' etc.
-////    const char* cone_filename = (argc>2) ? argv[2] : "data/bear.selection.txt";
-//
-//    // Read the cones and compute their corresponding vertex_descriptor in the underlying mesh 'sm'
-//    std::vector<SM_vertex_descriptor> cone_sm_vds;
-////    SMP::read_cones<SurfaceMesh>(sm, cone_filename, std::back_inserter(cone_sm_vds));
-//    cone_sm_vds.emplace_back(0);
-//    cone_sm_vds.emplace_back(5000);
-//    cone_sm_vds.emplace_back(10000);
-//    cone_sm_vds.emplace_back(11000);
-//    // Two property maps to store the seam edges and vertices
-//    Seam_edge_pmap seam_edge_pm = sm.add_property_map<SM_edge_descriptor, bool>("e:on_seam", false).first;
-//    Seam_vertex_pmap seam_vertex_pm = sm.add_property_map<SM_vertex_descriptor, bool>("v:on_seam",false).first;
-//
-//    // The seam mesh
-//    Mesh mesh(sm, seam_edge_pm, seam_vertex_pm);
-//
-//    // If provided, use the path between cones to create a seam mesh
-//    std::cout << "No seams given in input, computing the shortest paths between consecutive cones" << std::endl;
-//    std::list<SM_edge_descriptor> seam_edges;
-//    SMP::compute_shortest_paths_between_cones(sm, cone_sm_vds.begin(), cone_sm_vds.end(), seam_edges);
-//
-//    // Add the seams to the seam mesh
-//    for(SM_edge_descriptor e : seam_edges) {
-//        mesh.add_seam(source(e, sm), target(e, sm));
-//    }
-//
-//    std::cout << mesh.number_of_seam_edges() << " seam edges in input" << std::endl;
-//
-//    // Index map of the seam mesh (assuming a single connected component so far)
-//    typedef std::unordered_map<vertex_descriptor, int> Indices;
-//    Indices indices;
-//    boost::associative_property_map<Indices> vimap(indices);
-//    int counter = 0;
-//    for(vertex_descriptor vd : vertices(mesh)) {
-//        put(vimap, vd, counter++);
-//    }
-//
-//    // Mark the cones in the seam mesh
-//    std::unordered_map<vertex_descriptor, SMP::Cone_type> cmap;
-//    SMP::locate_cones(mesh, cone_sm_vds.begin(), cone_sm_vds.end(), cmap);
-//
-//    // The 2D points of the uv parametrisation will be written into this map
-//    // Note that this is a halfedge property map, and that uv values
-//    // are only stored for the canonical halfedges representing a vertex
-//    UV_pmap uvmap = sm.add_property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
-//
-//    // Parameterizer
-//    typedef SMP::Orbifold_Tutte_parameterizer_3<Mesh>         Parameterizer;
-//    Parameterizer parameterizer(SMP::Triangle, SMP::Cotangent);
-//
-//    // a halfedge on the (possibly virtual) border
-//    // only used in output (will also be used to handle multiple connected components in the future)
-//    halfedge_descriptor bhd = CGAL::Polygon_mesh_processing::longest_border(mesh).first;
-//
-//    parameterizer.parameterize(mesh, bhd, cmap, uvmap, vimap);
-//
-//    std::cout << "Finished in " << task_timer.time() << " seconds" << std::endl;
-//    return EXIT_SUCCESS;
-//}
-
-//std::unordered_map<Point_2, unsigned int> num_points;
-//std::unordered_map<Point_2, std::unordered_set<unsigned int>> vToUV;
-//std::vector<Point_2> vec;
-//for (auto hd : sm->halfedges()) {
-//vec.push_back(uvmap[hd]);
-//if (num_points.find(uvmap[hd]) == num_points.end()) {
-//num_points.insert({uvmap[hd], 1});
-//vToUV.insert({uvmap[hd], {}});
-//} else {
-//num_points.at(uvmap[hd]) = num_points.at(uvmap[hd]) + 1;
-//vToUV.at(uvmap[hd]).insert(sm->source(hd));
-//}
-//}
-//
-//std::vector<std::pair<Point_2, unsigned int>> elems(num_points.begin(), num_points.end());
-//std::sort(elems.begin(), elems.end(), [](auto a, auto b) {
-//return a.second > b.second;
-//});
-//
-//std::vector<std::pair<Point_2, std::unordered_set<unsigned int>>> vertices(vToUV.begin(), vToUV.end());
-//std::sort(vertices.begin(), vertices.end(), [](auto a, auto b) {
-//return a.second.size() > b.second.size();
-//});
-//
-//unsigned int dups;
-//std::unordered_set<unsigned int> dup_v;
-//for (auto e : vertices) {
-//if (e.second.size() <= 1) {
-//continue;
-//}
-//dups += e.second.size();
-//auto pnum = num_points.at(e.first);
-//std::cout << e.first << " -> " << pnum << " halfedges, " << e.second.size()<< " vertices, ( ";
-//for (auto v : vToUV.at(e.first)) {
-//std::cout << v << " ";
-//dup_v.insert(v);
-//}
-//std::cout << ")" << std::endl;
-//}
-//
-//std::cout << dups << " dups, " << dup_v.size() << " unique v" << std::endl;

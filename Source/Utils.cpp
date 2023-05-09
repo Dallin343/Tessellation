@@ -145,6 +145,27 @@ namespace Utils {
         return std::nullopt;
     }
 
+    std::string SectionString(AssigningSection section) {
+        switch (section) {
+            case MoveValidate:
+                return "MoveValidate";
+            case ProjectEdge:
+                return "ProjectEdge";
+            case MVEdgeCase:
+                return "MVEdgeCase";
+            case PVEdgeCase:
+                return "PVEdgeCase";
+            case ProjectValidate:
+                return "ProjectValidate";
+            case Undone:
+                return "Undone";
+            case Never:
+                return "Never";
+            default:
+                return "Error!";
+        }
+    };
+
 
     //Not used right now
     SeamMeshPtr UnwrapMesh(const SurfaceMeshPtr& sm, const std::string& selectionsFile) {

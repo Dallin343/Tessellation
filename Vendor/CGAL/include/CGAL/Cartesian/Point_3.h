@@ -48,7 +48,13 @@ public:
   PointC3(const FT &x, const FT &y, const FT &z, const FT &w)
     : base(x, y, z, w) {}
 
-  friend void swap(Self& a, Self& b)
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(base);
+    }
+
+
+    friend void swap(Self& a, Self& b)
 #if !defined(__INTEL_COMPILER) && defined(__cpp_lib_is_swappable)
     noexcept(std::is_nothrow_swappable_v<Vector_3>)
 #endif

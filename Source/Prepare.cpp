@@ -6,6 +6,7 @@
 #include "Utils.h"
 
 namespace Prepare {
+    std::vector<std::tuple<TessVertPtr, glm::vec3>> testing;
     OGLData toOGL(const SurfaceMesh& sm) {
         OGLData data;
         data.vertices.reserve(sm.number_of_vertices());
@@ -103,22 +104,63 @@ namespace Prepare {
                      EdgeSet& edgeSet, TexCoordVals& texCoordVals) {
         Point_2 uv_a, uv_b;
         std::tie(uv_a, uv_b) = matchUV(edge, face);
-        if (get(eSeamMap, edge->ed) || edgeSet.find(edge->ed) != edgeSet.end()) {
+        if (get(eSeamMap, edge->ed) || edgeSet.find(edge->ed) == edgeSet.end()) {
             for (auto& edgeVert : edge->tessVerts) {
                 auto bary = edgeVert->baryCoords;
                 auto uv = Utils::toGLM(uv_a) * bary.x + Utils::toGLM(uv_b) * (1.0f - bary.x);
                 auto displace = edgeVert->newCoords - edgeVert->origCoords;
+                if (bary.x > 0.9 || bary.x < 0.1) {
+                    int x = 1;
+                }
+                if (displace.x < 0.00001 && displace.y < 0.00001 && displace.z < 0.00001) {
+                    int x = 1;
+                }
+                if (glm::length(displace) > 60.0f) {
+                    testing.emplace_back(edgeVert, displace);
+                }
                 texCoordVals.emplace_back(uv, displace);
             }
+
+            //TODO: THis will probably cause problems on seams, so we may need to adjust this slightly.
+//            auto bary = edge->v0->baryCoords;
+//            auto uv = Utils::toGLM(uv_a) * bary.x + Utils::toGLM(uv_b) * (1.0f - bary.x);
+//            auto displace = edge->v0->newCoords - edge->v0->origCoords;
+//            texCoordVals.emplace_back(uv, displace);
+//
+//            bary = edge->v1->baryCoords;
+//            uv = Utils::toGLM(uv_a) * bary.x + Utils::toGLM(uv_b) * (1.0f - bary.x);
+//            displace = edge->v1->newCoords - edge->v1->origCoords;
+//            texCoordVals.emplace_back(uv, displace);
+
             edgeSet.insert(edge->ed);
+        }
+        else {
+//            std::cout << "Edge not on seam or is in set.\n";
         }
     }
 
-    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, ProcessFaceMap& processedFaces, int w, int h, int& max) {
+    std::pair<float, float> findPPMOffset(const std::vector<std::pair<glm::vec2, glm::vec3>>& texCoordVals) {
+        float offsetVal = std::numeric_limits<float>::max();
+        float maxVal = std::numeric_limits<float>::min();
+        for (auto& pair : texCoordVals) {
+            glm::vec3 val = pair.second;
+            if (val.r < offsetVal) offsetVal = val.r;
+            if (val.g < offsetVal) offsetVal = val.g;
+            if (val.b < offsetVal) offsetVal = val.b;
+
+            if (val.r > maxVal) maxVal = val.r;
+            if (val.g > maxVal) maxVal = val.g;
+            if (val.b > maxVal) maxVal = val.b;
+        }
+
+        offsetVal = abs(offsetVal);
+        return {offsetVal, maxVal + offsetVal};
+    }
+
+    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, ProcessFaceMap& processedFaces, int w, int h, float& offset, int& max) {
         std::vector<std::pair<glm::vec2, glm::vec3>> texCoordVals;
         EdgeSet processedEdges;
         auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
-
 
         for (const auto& fd: sm.faces()) {
             ProcessFacePtr face = processedFaces.at(fd);
@@ -126,9 +168,16 @@ namespace Prepare {
 
             //Create texCoords for inner vertices
             for (auto& innerVert : face->innerVerts) {
+                if (innerVert->vd.idx() == 19068) {
+                    int x = 1;
+
+                }
                 auto bary = innerVert->baryCoords;
                 auto uv = Utils::toGLM(uv0) * bary.x + Utils::toGLM(uv1) * bary.y + Utils::toGLM(uv2) * bary.z;
                 auto displace = innerVert->newCoords - innerVert->origCoords;
+                if (glm::length(displace) > 60.0f) {
+                    testing.emplace_back(innerVert, displace);
+                }
                 texCoordVals.emplace_back(uv, displace);
             }
 
@@ -148,29 +197,42 @@ namespace Prepare {
 
         max = 0;
         int issues = 0;
+        auto [offsetVal, maxVal] = findPPMOffset(texCoordVals);
+
         for (auto& pair : texCoordVals) {
             glm::vec2 uv = pair.first;
             glm::vec3 val = pair.second;
 
             int row, col;
-            col = (int)trunc(uv.x * float(h));
-            row = (int)trunc(uv.y * float(w));
-            if (tex[row * h + col] != glm::vec3(0.0f, 0.0f, 0.0f)) {
+            col = (int)trunc(uv.x * float(w));
+            row = (int)trunc(uv.y * float(h));
+            if (tex[row * w + col] != glm::vec3(0.0f, 0.0f, 0.0f)) {
                 issues++;
             } else {
-                if (ceil(val.r) > max) {
-                    max = (int)ceil(val.r);
-                }
-                if (ceil(val.g) > max) {
-                    max = (int)ceil(val.g);
-                }
-                if (ceil(val.b) > max) {
-                    max = (int)ceil(val.b);
-                }
-                tex[row * h + col] = val;
+//                if (ceil(val.r) > max) {
+//                    max = (int)ceil(val.r);
+//                }
+//                if (ceil(val.g) > max) {
+//                    max = (int)ceil(val.g);
+//                }
+//                if (ceil(val.b) > max) {
+//                    max = (int)ceil(val.b);
+//                }
+                tex[row * w + col] = val;
             }
         }
+        max = (int)ceil(maxVal);
+        offset = offsetVal;
         std::cout << "Overlap during texGen: " << issues << "\n";
+        std::cout << "Long displaces: " << testing.size() << "\n";
+
+        for (auto [tooLong, displace] : testing) {
+            bool hasMatch = tooLong->matchingFeature != nullptr;
+            std::string assignedBy = Utils::SectionString(tooLong->assignedBy);
+            std::cout << tooLong->vd << ": OnSeam = " << tooLong->isOnSeam << ", OnEdge = " << !tooLong->isInner << ", Anchored = " << tooLong->anchored
+                        << ", HasMatch = " << hasMatch << ", AssignedBy = " << assignedBy << "\n";
+        }
+        testing.clear();
 
         return tex;
     }

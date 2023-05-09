@@ -71,6 +71,11 @@ public:
     : base( w != FT_(1) ? CGAL::make_array<FT_>(x/w, y/w, z/w)
                        : CGAL::make_array(x, y, z) ) {}
 
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(base);
+    }
+
   friend void swap(Self& a, Self& b)
 #if !defined(__INTEL_COMPILER) && defined(__cpp_lib_is_swappable)
     noexcept(std::is_nothrow_swappable_v<Base>)

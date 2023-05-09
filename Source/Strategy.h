@@ -9,12 +9,16 @@
 #include "IO.h"
 #include "Utils.h"
 
+const int test_vd = 5767;
+
 namespace Strategy {
     struct Stats {
         unsigned int invalid_tessFaces = 0;
         unsigned int processed_edges = 0;
         unsigned int mv_edge_cases = 0;
         unsigned int pv_edge_cases = 0;
+        unsigned int moved_vertices = 0;
+        unsigned int total_vertices = 0;
 
         void print() const {
             std::cout << "\n== Strategy Stats ==\n";
@@ -22,7 +26,18 @@ namespace Strategy {
             std::cout << "Edges tessellated: " << processed_edges << "\n";
             std::cout << "MoveAndValidate edge cases: " << mv_edge_cases << "\n";
             std::cout << "ProjectAndValidate edge cases: " << pv_edge_cases << "\n";
+            std::cout << "Moved Vertices: " << moved_vertices << "\n";
+            std::cout << "Total Vertices: " << total_vertices << "\n";
             std::cout << "====\n\n";
+        }
+
+        void clear() {
+            invalid_tessFaces = 0;
+            processed_edges = 0;
+            mv_edge_cases = 0;
+            pv_edge_cases = 0;
+            moved_vertices = 0;
+            total_vertices = 0;
         }
     };
     struct CollapseStats {
@@ -116,13 +131,18 @@ namespace Strategy {
 
                 bool v0_is_on_seam = get(vSeamMap, v0);
                 bool v1_is_on_seam = get(vSeamMap, v1);
-                if (stats.processed_edges == 4985) {
+                if (stats.processed_edges == test_vd) {
                     int x = 1;
-                    auto uv0 = get(uvmap, prof.v0_v1());
-                    auto uv1 = get(uvmap, prof.v1_v0());
-                    std::cout << "v0: " << v0 << " - " << uv0.x() << ", " << uv0.y() << "\n";
-                    std::cout << "v1: " << v1 << " - " << uv1.x() << ", " << uv1.y() << "\n";
+//                    auto uv0 = get(uvmap, prof.v0_v1());
+//                    auto uv1 = get(uvmap, prof.v1_v0());
+//                    std::cout << "v0: " << v0 << " - " << uv0.x() << ", " << uv0.y() << "\n";
+//                    std::cout << "v1: " << v1 << " - " << uv1.x() << ", " << uv1.y() << "\n";
                 }
+
+                const float epsilon = 1e-4;
+                const auto p2_equal = [epsilon] (Point_2 a, Point_2 b) {
+                    return abs((b - a).x()) < epsilon && abs((b - a).x()) < epsilon;
+                };
 
                 int count = 0;
                 for (auto hd : halfedges_around_source(v0, mesh)) {
@@ -132,10 +152,10 @@ namespace Strategy {
                     auto vnext_uv = get(uvmap, mesh.next(hd));
 
                     if (v0_is_on_seam && v1_is_on_seam) {
-                        if (v0_uv == v0_vR_uv) {
+                        if (p2_equal(v0_uv, v0_vR_uv)) {
                             v0_hd_newUV.insert({mesh.target(hd), v1_v0_uv});
                         }
-                        else if (v0_uv == v0_v1_uv) {
+                        else if (p2_equal(v0_uv, v0_v1_uv)) {
                             v0_hd_newUV.insert({mesh.target(hd), v1_vL_uv});
                         }
                         else {
@@ -168,12 +188,15 @@ namespace Strategy {
 
                     auto v1_uv = get(uvmap, hd);
                     auto vnext_uv = get(uvmap, mesh.next(hd));
+                    if (mesh.target(hd).idx() == 29827 || mesh.target(hd).idx() == 30002) {
+                        int x = 0;
+                    }
 
                     if (v0_is_on_seam && v1_is_on_seam) {
-                        if (v1_uv == v1_vL_uv) {
+                        if (p2_equal(v1_uv, v1_vL_uv)) {
                             v1_hd_newUV.insert({mesh.target(hd), v0_v1_uv});
                         }
-                        else if (v1_uv == v1_v0_uv) {
+                        else if (p2_equal(v1_uv, v1_v0_uv)) {
                             v1_hd_newUV.insert({mesh.target(hd), v0_vR_uv});
                         }
                         else {
@@ -273,6 +296,10 @@ namespace Strategy {
                         }
                     }
                 }
+
+                if ((vd == v0 && mesh.point(vd) == p1) || (vd == v1 && mesh.point(vd) == p0)) {
+                    using_non_seam_vd = true;
+                }
             }
 
             if (v0Seam && v1Seam) {
@@ -286,10 +313,13 @@ namespace Strategy {
                 auto& vdSeamUVs = vd == v0 ? v0_seam_uvs : v1_seam_uvs;
 
                 for (auto hd : halfedges_around_source(vd, mesh)) {
-//                    std::stringstream press;
-//                    press << "../out/beast-step" << count << "-pe.obj";
-//                    std::ofstream preOut(press.str());
-//                    IO::toOBJ(mesh, preOut);
+//                    if (stats.processed_edges == test_vd) {
+//                        std::stringstream press;
+//                        press << "../out/beast-step" << count << "-pe.obj";
+//                        std::ofstream preOut(press.str());
+//                        IO::toOBJ(mesh, preOut);
+//                    }
+
 
 //                    std::cout << count << " found in map? ";
 //                    auto targetVD = mesh.target(hd);
@@ -304,33 +334,72 @@ namespace Strategy {
 //                    if (target_in_other && otherSeamUVs.size() == 3 && hd_uv != vR_uv && hd_uv != vL_uv) {
 //                        put(uvmap, hd, hd_uv);
 //                    }
+                    auto next = get(uvmap, mesh.next(hd));
                     auto targetVD = mesh.target(hd);
+//                    if(stats.processed_edges == test_vd) {
+//                        std::cout << "targetVD: " << targetVD << " - " << next.x() << ", " << next.y() << std::endl;
+//                    }
+
                     bool target_in_vd = vdUVs.find(targetVD) != vdUVs.end();
                     bool target_in_other = otherUVs.find(targetVD) != otherUVs.end();
-                    if (target_in_vd /*&& !target_in_other*/) {
+                    auto target_in_other_seams = std::find_if(otherSeamUVs.begin(), otherSeamUVs.end(),[targetVD] (std::pair<SM_vertex_descriptor, Point_2> a) {
+                        return a.first == targetVD;
+                    });
+
+                    if (target_in_other_seams != otherSeamUVs.end()) {
+                        auto p = (*target_in_other_seams).second;
+                        put(uvmap, hd, p);
+//                        if (stats.processed_edges == test_vd) {
+//                            std::cout << "in seams\n" << std::endl;
+//                            std::cout << "VD: " << targetVD << " - UV: " << p.x() << ", " << p.y() << "\n"<<std::endl;
+//                        }
+                    }
+                    else if (target_in_vd /*&& !target_in_other*/) {
                         aCount++;
                         auto p = vdUVs.at(targetVD);
 //                        std::cout << "in first. " << p.x() << ", " << p.y();
                         put(uvmap, hd, p);
-                    }
+
+//                        if (stats.processed_edges == test_vd) {
+//                            std::cout << "in vds uv" << std::endl;
+//                            if (target_in_other) {
+//                                std::cout << "Also in other" << std::endl;
+//                            }
+//                            std::cout << "VD: " << targetVD << " - UV: " << p.x() << ", " << p.y() << "\n"<<std::endl;
+//                        }
+                    }/* else if (stats.processed_edges == test_vd) {
+                        std::cout << "None\n" << std::endl;
+                    }*/
+//                    else if (target_in_other) {
+//                        auto p = otherUVs.at(targetVD);
+////                        std::cout << "in first. " << p.x() << ", " << p.y();
+//                        put(uvmap, hd, p);
+//
+//                        if (stats.processed_edges == 4985) {
+//                            std::cout << "in other uv" << std::endl;
+//                            std::cout << "VD: " << targetVD << " - UV: " << p.x() << ", " << p.y() << "\n"<<std::endl;
+//                        }
+//                    }
 /*                    if (target_in_other*//* && !target_in_vd*//*) {
                         bCount++;
                         auto p = otherUVs.at(targetVD);
 
                         put(uvmap, hd, p);
-                    }*/ else if (targetVD == vR){
-                        put(uvmap, hd, vd == v0 ? v0_vR_uv : v1_v0_uv);
-                    } else if (targetVD == vL) {
-                        put(uvmap, hd, vd == v0 ? v0_v1_uv : v1_vL_uv);
-                    } else {
-//                        std::cout << "None match" << std::endl;
-                    }
-
-//                    std::stringstream poss;
-//                    poss << "../out/beast-step" << count << "-post.obj";
-//                    std::ofstream posOut(poss.str());
-//                    IO::toOBJ(mesh, posOut);
-//                    count++;
+                    }*/
+//                    else if (stats.processed_edges == 4985) {
+//                        std::cout << "Not in either uv" << std::endl;
+//                        if (target_in_other) {
+//                            auto o = otherUVs.at(targetVD);
+//                            std::cout << "VD: " << targetVD << " - UV: " << o.x() << ", " << o.y() << "\n"<<std::endl;
+//                        }
+//                    }
+//                    if (stats.processed_edges == test_vd) {
+//                        std::stringstream poss;
+//                        poss << "../out/beast-step" << count << "-post.obj";
+//                        std::ofstream posOut(poss.str());
+//                        IO::toOBJ(mesh, posOut);
+//                    }
+                    count++;
                 }
                 int x = 1;
             }
@@ -372,15 +441,18 @@ namespace Strategy {
                     put(uvmap, hd, v0v1_p_2);
                 }
             }
+//            if (stats.processed_edges == test_vd) {
+//                int x = 1;
+//            }
             stats.processed_edges++;
 //            if (stats.processed_edges % 500 == 0) {
-//            if (stats.processed_edges % 1 == 0 && stats.processed_edges >= 4985 && stats.processed_edges <= 5000) {
-            if (stats.processed_edges % 1 == 0 && stats.processed_edges == 4985) {
-                    std::stringstream press;
-                    press << "../out/beast-collapse" << stats.processed_edges << ".obj";
-                    std::ofstream preOut(press.str());
-                    IO::toOBJ(mesh, preOut);
-            }
+//            if (stats.processed_edges % 1 == 0 && stats.processed_edges >= 5760 && stats.processed_edges <= 5770) {
+//            if (stats.processed_edges % 1 == 0 && stats.processed_edges == test_vd) {
+//                    std::stringstream press;
+//                    press << "../out/beast-collapse" << stats.processed_edges << ".obj";
+//                    std::ofstream preOut(press.str());
+//                    IO::toOBJ(mesh, preOut);
+//            }
         }
 
         UV_pmap uvmap;
@@ -450,11 +522,15 @@ namespace Strategy {
 
     void minBiGraphMatch(const ProcessFacePtr& processFace, const FeatureVerts& featureVerts, Stats& stats);
 
-    void moveAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& sm_orig,
+    void moveAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh,
                          const Gauss_vertex_pmap& gaussMap, Stats& stats);
 
-    void projectAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& sm_orig, Tree& aabbTree,
+    void projectAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh, Tree& aabbTree,
                             VertSet& interpolateVerts, Stats& stats);
+
+    void interpolateUnmatched(const VertSet& vertices, SurfaceMesh& sm);
+
+    void calculateUVs(SurfaceMesh& sm_tess, const SurfaceMesh& sm_orig, const ProcessFaceMap& processedFaces);
 };
 
 

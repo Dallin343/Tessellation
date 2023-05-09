@@ -8,8 +8,30 @@
 #include <Hungarian.h>
 
 namespace Strategy {
+    void set_seam_maps(const SurfaceMesh& sm, const TessVertPtr& v0, const TessVertPtr& v1, const TessVertPtr& v2) {
+        auto vSeamMap = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
+        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+
+        auto v0v1 = sm.edge(sm.halfedge(v0->vd, v1->vd));
+        auto v1v2 = sm.edge(sm.halfedge(v1->vd, v2->vd));
+        auto v2v0 = sm.edge(sm.halfedge(v2->vd, v0->vd));
+
+        put(vSeamMap, v0->vd, v0->isOnSeam);
+        put(vSeamMap, v1->vd, v1->isOnSeam);
+        put(vSeamMap, v2->vd, v2->isOnSeam);
+
+        if (v0->isOnSeam && v1->isOnSeam) {
+            put(eSeamMap, v0v1, true);
+        } else if (v1->isOnSeam && v2->isOnSeam) {
+            put(eSeamMap, v1v2, true);
+        } else if (v2->isOnSeam && v0->isOnSeam) {
+            put(eSeamMap, v2v0, true);
+        }
+    }
+
     void tessellateFace(const ProcessFacePtr& processFace, SurfaceMesh& sm, const TessLevel& tL, TessEdgeMap& edgeVerts,
                         Stats& stats) {
+        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
         auto removed = sm.property_map<SM_vertex_descriptor, bool>("v:removed").first;
@@ -20,6 +42,10 @@ namespace Strategy {
         bool e01_exists = edgeVerts.find(e01hd) != edgeVerts.end();
         bool e02_exists = edgeVerts.find(e02hd) != edgeVerts.end();
         bool e12_exists = edgeVerts.find(e12hd) != edgeVerts.end();
+
+        bool e01_is_seam = get(eSeamMap, e01hd);
+        bool e02_is_seam = get(eSeamMap, e02hd);
+        bool e12_is_seam = get(eSeamMap, e12hd);
 
         std::vector<TessVertPtr> e01Verts, e02Verts, e12Verts;
 
@@ -142,6 +168,10 @@ namespace Strategy {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
                         tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.y, 0.0, 0.0));
                         tessVert->vd = vd;
+                        if (e12_is_seam) {
+                            //If edge is a seam, make this vertex on seam.
+                            tessVert->isOnSeam = true;
+                        }
                         processFace->e12->tessVerts.push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(1));
@@ -165,6 +195,10 @@ namespace Strategy {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
                         tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.x, 0.0, 0.0));
                         tessVert->vd = vd;
+                        if (e02_is_seam) {
+                            //If edge is a seam, make this vertex on seam.
+                            tessVert->isOnSeam = true;
+                        }
                         processFace->e02->tessVerts.push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(0));
@@ -186,6 +220,10 @@ namespace Strategy {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
                         tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.x, 0.0, 0.0));
                         tessVert->vd = vd;
+                        if (e01_is_seam) {
+                            //If edge is a seam, make this vertex on seam.
+                            tessVert->isOnSeam = true;
+                        }
                         processFace->e01->tessVerts.push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(0));
@@ -235,6 +273,8 @@ namespace Strategy {
                 stats.invalid_tessFaces++;
                 continue;
             }
+
+            set_seam_maps(sm, v0, v1, v2);
             auto tessellatedFace = std::make_shared<TessellatedFace>();
             tessellatedFace->fd = fd;
             tessellatedFace->vertices = {v0, v1, v2};
@@ -266,6 +306,7 @@ namespace Strategy {
                 if (projOnNormal.has_value()) {
                     vertex->newCoords = Utils::toGLM(projOnNormal.value());
                     vertex->anchored = true;
+                    vertex->assignedBy = AssigningSection::ProjectEdge;
                     sm.point(vertex->vd) = projOnNormal.value();
                 } else {
                     interpolateVerts.insert(vertex);
@@ -355,7 +396,7 @@ namespace Strategy {
         }
     }
 
-    void moveAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& sm_orig,
+    void moveAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh,
                          const Gauss_vertex_pmap& gaussMap, Stats& stats) {
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
@@ -367,9 +408,13 @@ namespace Strategy {
 
         //Move
         for (auto& innerVert : processFace->innerVerts) {
+            if (innerVert->vd.idx() == 19068) {
+                int x = 1;
+            }
             if (innerVert->matchingFeature != nullptr) {
                 glm::vec3 newCoords = innerVert->matchingFeature->cartCoords;
                 innerVert->newCoords = newCoords;
+                innerVert->assignedBy = AssigningSection::MoveValidate;
                 sm.point(innerVert->vd) = {newCoords.x, newCoords.y, newCoords.z};
             }
         }
@@ -396,7 +441,7 @@ namespace Strategy {
 
                         auto feature = tessVert->matchingFeature;
                         if (feature != nullptr) {
-                            auto featureVD = sm_orig.source(feature->hd);
+                            auto featureVD = highResMesh.source(feature->hd);
                             if (get(gaussMap, featureVD) < minCurvature) {
                                 minCurvature = get(gaussMap, featureVD);
                                 minVD = vd;
@@ -407,6 +452,7 @@ namespace Strategy {
                     if (numEdges == 2 && (minVD == SurfaceMesh::null_vertex() || processFace->vdToTessVert.at(minVD)->matchingFeature ==
                                                                                  nullptr)) {
                         stats.mv_edge_cases++;
+                        processFace->vdToTessVert.at(minVD)->assignedBy = AssigningSection::MVEdgeCase;
                         break;
                     }
                     if (minVD == SurfaceMesh::null_vertex()) {
@@ -419,6 +465,7 @@ namespace Strategy {
                     sm.point(minVD) = Utils::toPoint3(vert->origCoords);
                     vert->matchingFeature = nullptr;
                     vert->undoMove();
+                    vert->assignedBy = AssigningSection::Undone;
                 }
             } while(dot < 0);
         }
@@ -434,7 +481,7 @@ namespace Strategy {
 #endif
     }
 
-    void projectAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& sm_orig, Tree& aabbTree,
+    void projectAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh, Tree& aabbTree,
                             VertSet& interpolateVerts, Stats& stats) {
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
@@ -448,6 +495,7 @@ namespace Strategy {
                 if (projOnNormal.has_value()) {
                     auto newCoords = Utils::toGLM(projOnNormal.value());
                     tessVert->newCoords = newCoords;
+                    tessVert->assignedBy = AssigningSection::ProjectValidate;
                     sm.point(tessVert->vd) = projOnNormal.value();
                 }
             }
@@ -474,22 +522,17 @@ namespace Strategy {
 
                     auto fColor = sm.property_map<SM_face_descriptor, CGAL::IO::Color>("f:color").first;
 
-                    if (undoVD == SurfaceMesh::null_vertex() || processFace->vdToTessVert.at(undoVD)->matchingFeature == nullptr) {
+                    if (processFace->vdToTessVert.at(undoVD)->matchingFeature == nullptr) {
                         put(fColor, tessFace->fd, CGAL::IO::Color(0x00, 0xFF, 0x00));
                         stats.pv_edge_cases++;
+                        processFace->vdToTessVert.at(undoVD)->assignedBy = AssigningSection::PVEdgeCase;
                         break;
-                    }
-                    if (undoVD == SurfaceMesh::null_vertex()) {
-                        put(fColor, tessFace->fd, CGAL::IO::Color(0x00, 0xFF, 0x00));
-                        CGAL::draw(sm);
-                        break;
-                    } if (undoVD.idx() == 16659) {
-                        CGAL::draw(sm);
                     }
                     auto vert = processFace->vdToTessVert.at(undoVD);
                     sm.point(undoVD) = Utils::toPoint3(vert->origCoords);
                     vert->matchingFeature = nullptr;
                     vert->undoMove();
+                    vert->assignedBy = AssigningSection::Undone;
                 }
             } while(dot < 0);
         }
@@ -503,5 +546,42 @@ namespace Strategy {
 #if DRAW_STEPS || DRAW_PV
         CGAL::draw(sm, "Project and Validate");
 #endif
+    }
+
+    void interpolateUnmatched(const VertSet& vertices, SurfaceMesh& sm) {
+        glm::dvec3 sum = {};
+        std::vector<glm::vec3> adjPoints;
+        for (auto& vert : vertices) {
+            adjPoints.clear();
+            sum = {};
+
+            for (auto hd : halfedges_around_source(vert->vd, sm)) {
+                Point_3 p = sm.point(sm.target(hd));
+                adjPoints.emplace_back(p.x(), p.y(), p.z());
+            }
+
+            //Iterate over each adjacent vertex, find vector from that vertex to all others, add it to sum
+            //we will then average them all to get the points interpolated pos.
+            for (int to = 1; to < adjPoints.size(); to++) {
+                auto vector = adjPoints.at(to) - adjPoints.at(0);
+                sum += vector;
+            }
+            auto avg = (glm::vec3)(sum / (double)(adjPoints.size() - 1));
+            auto newPoint = adjPoints.at(0) + avg;
+            vert->newCoords = newPoint;
+            vert->anchored = true;
+            vert->assignedBy = InterpolateUnmatched;
+            sm.point(vert->vd) = Utils::toPoint3(newPoint);
+        }
+    }
+
+    void calculateUVs(SurfaceMesh& sm_tess, const SurfaceMesh& sm_orig, const ProcessFaceMap& processedFaces) {
+        for (const auto& [fd, face] : processedFaces) {
+            auto [uv0, uv1, uv2] = face->uvs;
+
+            for (auto tessVert: face->tessVerts) {
+
+            }
+        }
     }
 }

@@ -9,9 +9,18 @@
 #include <iomanip>
 
 namespace IO {
-    void toOBJ(const SurfaceMesh& sm, std::ostream& out);
+    typedef std::unordered_map<unsigned long, unsigned int> VdHdMap;
+    typedef std::unordered_map<unsigned int, unsigned int> VdMap;
+
+    inline unsigned long key(unsigned int i, unsigned int j) {
+        return ((unsigned long) i) << 32 | j;
+    }
+
+    void toOBJ(const SurfaceMesh& sm, std::ostream& out, const std::string& outVD, const std::string& outHD, const std::string& outSeams);
     //Convenience method
     std::pair<SurfaceMeshPtr, SeamMeshPtr> fromOBJ(const std::string& filename, const std::string& seamFilename);
+    std::tuple<SurfaceMeshPtr, VdMap, VdHdMap>  fromOBJ(const std::string& filename, const std::string& vdMapFilename,
+                                                        const std::string& hdMapFilename, const std::string& seamsFilename);
 
     SurfaceMeshPtr LoadMesh(const std::string& filename);
 
@@ -19,7 +28,7 @@ namespace IO {
 
     SeamMeshPtr AddSeams(const SurfaceMeshPtr& sm, const std::string& selectionsFile);
 
-    void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, unsigned int max, const std::string& file);
+    void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, float offsetVal, unsigned int max, const std::string& file);
 };
 
 

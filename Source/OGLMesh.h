@@ -12,16 +12,20 @@
 
 class OGLMesh {
 public:
+    enum Type {
+        Patches,
+        Triangles
+    };
+
     OGLMesh(const Prepare::OGLData& meshData);
     void setupMesh();
-    void draw(const Shader& shader) const;
+    void draw(const Shader& shader, Type drawType) const;
 
     unsigned int VAO, VBO, EBO;
 
     std::vector<Prepare::VertexData> vertices;
     std::vector<unsigned int> indices;
     std::vector<Prepare::FaceData> faces;
-
 };
 
 
