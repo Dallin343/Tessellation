@@ -210,10 +210,6 @@ int main(int argc, char** argv)
                                                                                                          0x44)).first;
             int faceCount = 1;
             for (SM_face_descriptor fd: sm->faces()) {
-                if (faceCount == 734) {
-                    int x = 1;
-
-                }
                 auto processFace = std::make_shared<ProcessFace>();
                 processFace->fd = fd;
 
@@ -255,15 +251,6 @@ int main(int argc, char** argv)
 
             allTessMeshes.at(i).mesh = sm_copy;
 
-            stats.total_vertices = sm_copy->number_of_vertices();
-            for (const auto& [fd, face] : currTessLevel.processedFaces) {
-                for (const auto& vert : face->innerVerts) {
-                    if (vert->isAssigned()) {
-                        stats.moved_vertices++;
-                    }
-                }
-            }
-
             auto newFNorms = sm_copy->property_map<SM_face_descriptor, Vector>("f:normal").first;
             auto newVNorms = sm_copy->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
             CGAL::Polygon_mesh_processing::compute_normals(*sm_copy, newVNorms, newFNorms);
@@ -271,6 +258,8 @@ int main(int argc, char** argv)
             bars[0].set_option(option::PostfixText{
                     std::to_string(i) + "/" + std::to_string(NUM_TESS_LEVELS) + " [" + tessBarStates.at(++state) + "]"
             });
+
+            Strategy::calculateUVs(*sm_copy, *sm, currTessLevel.processedFaces);
 
             if (EXPORT_TESSELLATED_MESH) {
                 std::ofstream finalOut("../out/beast-export-" + std::to_string(i) + ".obj");

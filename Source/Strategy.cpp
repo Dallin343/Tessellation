@@ -32,6 +32,7 @@ namespace Strategy {
     void tessellateFace(const ProcessFacePtr& processFace, SurfaceMesh& sm, const TessLevel& tL, TessEdgeMap& edgeVerts,
                         Stats& stats) {
         auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+        auto uvmap = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
         auto removed = sm.property_map<SM_vertex_descriptor, bool>("v:removed").first;
@@ -259,6 +260,31 @@ namespace Strategy {
         }
         processFace->tessVerts = tessellatedVerts;
 
+        // temporarily save uvs for ends of a seam edge, so we can use them after the face is tessellated.
+//        struct SeamUV {
+//            Point_2 v0_v1, v1_vL, v1_v0, v0_vR;
+//        };
+//        std::unordered_map<SM_edge_descriptor, SeamUV> seamUVMap;
+//        auto addSeamUV = [&](const TessVertPtr& v0, const TessVertPtr& v1, SM_edge_descriptor ed) {
+//            SeamUV seamUV;
+//            auto v0_v1 = sm.halfedge(v0->vd, v1->vd), v1_v0 = sm.halfedge(v1->vd, v0->vd);;
+//            seamUV.v0_v1 = get(uvmap, v0_v1);
+//            seamUV.v1_v0 = get(uvmap, v1_v0);
+//            seamUV.v0_vR = get(uvmap, sm.next(v1_v0));
+//            seamUV.v1_vL = get(uvmap, sm.next(v0_v1));
+//            seamUVMap.insert({ed, seamUV});
+//        };
+//
+//        if (e01_is_seam && !e01_exists) {
+//            addSeamUV(processFace->e01->v0, processFace->e01->v1, e01hd);
+//        }
+//        if (e12_is_seam && !e12_exists) {
+//            addSeamUV(processFace->e12->v0, processFace->e01->v1, e12hd);
+//        }
+//        if (e02_is_seam && !e02_exists) {
+//            addSeamUV(processFace->e02->v0, processFace->e02->v1, e02hd);
+//        }
+
         //TODO: Maybe make new face normals based on vertex normals.
         //Add faces
         CGAL::Euler::remove_face(sm.halfedge(processFace->fd), sm);
@@ -285,6 +311,66 @@ namespace Strategy {
             auto nrm = Utils::compute_face_normal(Utils::toPoint3(v0->origCoords), Utils::toPoint3(v1->origCoords), Utils::toPoint3(v2->origCoords));
             put(fNorms, fd, nrm);
         }
+
+//        auto calculateSeamUV = [&](const ProcessEdgePtr& e) {
+//            auto& tessVerts = e->tessVerts;
+//            std::sort(tessVerts.begin(), tessVerts.end(), [](const TessVertPtr& a, const TessVertPtr& b) {
+//                return a->baryCoords.x < b->baryCoords.x;
+//            });
+//
+//            std::vector<TessVertPtr> allVerts;
+//            allVerts.reserve(tessVerts.size() + 2);
+//            allVerts.push_back(e->v0);
+//            allVerts.insert(allVerts.end(), tessVerts.begin(), tessVerts.end());
+//            allVerts.push_back(e->v1);
+//
+//            auto seamUVs = seamUVMap.at(e->ed);
+//            auto v0_v1_vec = Utils::toGLM(seamUVs.v1_vL) - Utils::toGLM(seamUVs.v0_v1);
+//            auto v1_v0_vec = Utils::toGLM(seamUVs.v0_vR) - Utils::toGLM(seamUVs.v1_v0);
+//
+//            for (int i = 0; i < allVerts.size(); i++) {
+//                auto a = allVerts.at(i);
+//                auto b = allVerts.at(i + 1);
+//                auto hd = sm.halfedge(a->vd, b->vd);
+//                Point_2 uv;
+//                if (i == 0) {
+//                    uv = seamUVs.v0_v1;
+//                } else if (i == allVerts.size() - 1) {
+//                    uv = seamUVs.v1_vL;
+//                } else {
+//                    auto newUV = Utils::toGLM(seamUVs.v0_v1) + (v0_v1_vec * a->baryCoords.x);
+//                    uv = {newUV.x, newUV.y};
+//                }
+//
+//                put(uvmap, hd, uv);
+//            }
+//
+//            for (int i = allVerts.size() - 1; i > 0; i--) {
+//                auto a = allVerts.at(i);
+//                auto b = allVerts.at(i - 1);
+//                auto hd = sm.halfedge(a->vd, b->vd);
+//                Point_2 uv;
+//                if (i == allVerts.size() - 1) {
+//                    uv = seamUVs.v1_v0;
+//                } else if (i == 1) {
+//                    uv = seamUVs.v0_vR;
+//                } else {
+//                    auto newUV = Utils::toGLM(seamUVs.v1_v0) + (v1_v0_vec * (1.0f - a->baryCoords.x));
+//                    uv = {newUV.x, newUV.y};
+//                }
+//
+//                put(uvmap, hd, uv);
+//            }
+//        };
+//        if (e01_is_seam && !e01_exists) {
+//            calculateSeamUV(processFace->e01);
+//        }
+//        if (e12_is_seam && !e12_exists) {
+//            calculateSeamUV(processFace->e12);
+//        }
+//        if (e02_is_seam && !e02_exists) {
+//            calculateSeamUV(processFace->e02);
+//        }
 
         stats.processed_edges = edgeVerts.size();
 #if DRAW_STEPS || DRAW_T
@@ -576,12 +662,82 @@ namespace Strategy {
     }
 
     void calculateUVs(SurfaceMesh& sm_tess, const SurfaceMesh& sm_orig, const ProcessFaceMap& processedFaces) {
+        auto tess_uvmap = sm_tess.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        auto orig_uvmap = sm_orig.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        auto orig_eSeams = sm_orig.property_map<SM_edge_descriptor , bool>("e:on_seam").first;
+
+        auto calculateEdgeUVs = [&](const ProcessEdgePtr& e, const ProcessFacePtr& f, const TessVertPtr& v0, const TessVertPtr& v1) {
+            bool bary_basis_match = e->v0->vd == v0->vd;
+            auto v0_v1_hd = sm_orig.halfedge(v0->vd, v1->vd);
+            auto v0_uv = Utils::toGLM(get(orig_uvmap, v0_v1_hd));
+            auto v1_uv = Utils::toGLM(get(orig_uvmap, sm_orig.next(v0_v1_hd)));
+            auto v0_v1_vec = v1_uv - v0_uv;
+
+            auto& tessVerts = e->tessVerts;
+            std::sort(tessVerts.begin(), tessVerts.end(), [bary_basis_match](const TessVertPtr& a, const TessVertPtr& b) {
+                //Flip the sort direction if the bary coords are based opposite.
+                //This way, the verts will be sorted going from v0 -> v1;
+                return bary_basis_match ? a->baryCoords.x > b->baryCoords.x : a->baryCoords.x < b->baryCoords.x;
+            });
+
+            std::vector<TessVertPtr> allVerts;
+            allVerts.reserve(tessVerts.size() + 2);
+            allVerts.push_back(v0);
+            allVerts.insert(allVerts.end(), tessVerts.begin(), tessVerts.end());
+            allVerts.push_back(v1);
+
+            for (int i = 0; i < allVerts.size(); i++) {
+                if (i == allVerts.size() - 1) {
+                    auto a = allVerts.at(i-1);
+                    auto b = allVerts.at(i);
+                    auto hd = sm_tess.next(sm_tess.halfedge(a->vd, b->vd));
+                    Point_2 uv = {v1_uv.x, v1_uv.y};
+                    put(tess_uvmap, hd, uv);
+                    continue;
+                }
+
+                auto a = allVerts.at(i);
+                auto b = allVerts.at(i+1);
+                auto edge_hd = sm_tess.halfedge(a->vd, b->vd);
+
+                auto offset = bary_basis_match ? 1.0f - a->baryCoords.x : a->baryCoords.x;
+                auto newUV = v0_uv + (v0_v1_vec * offset);
+                Point_2 uv = {newUV.x, newUV.y};
+                if (i == 0) {
+                    uv = {v0_uv.x, v0_uv.y};
+                }
+
+                put(tess_uvmap, edge_hd, uv);
+
+                for (auto hd : halfedges_around_source(a->vd, sm_tess)) {
+                    auto& vdMap = f->vdToTessVert;
+                    auto t = sm_tess.target(hd);
+                    if (vdMap.find(t) != vdMap.end() && vdMap.at(t)->isInner) {
+                        put(tess_uvmap, hd, uv);
+                    }
+                }
+            }
+        };
+
         for (const auto& [fd, face] : processedFaces) {
             auto [uv0, uv1, uv2] = face->uvs;
+            glm::vec2 uv0_glm = Utils::toGLM(uv0), uv1_glm = Utils::toGLM(uv1), uv2_glm = Utils::toGLM(uv2);
 
-            for (auto tessVert: face->tessVerts) {
+            //Inner verts are easy, just calculate the barycentric combination of each uv.
+            for (const auto& innerVert: face->innerVerts) {
+                auto bary = innerVert->baryCoords;
+                auto uv_glm = (bary.x * uv0_glm) + (bary.y * uv1_glm )+ (bary.z * uv2_glm);
+                Point_2 uv = {uv_glm.x, uv_glm.y};
 
+                for (auto hd : halfedges_around_source(innerVert->vd, sm_tess)) {
+                    put(tess_uvmap, hd, uv);
+                }
             }
+
+            auto& vdMap = face->vdToTessVert;
+            calculateEdgeUVs(face->e01, face, vdMap.at(face->vds.at(0)), vdMap.at(face->vds.at(1)));
+            calculateEdgeUVs(face->e12, face, vdMap.at(face->vds.at(1)), vdMap.at(face->vds.at(2)));
+            calculateEdgeUVs(face->e02, face, vdMap.at(face->vds.at(2)), vdMap.at(face->vds.at(0)));
         }
     }
 }
