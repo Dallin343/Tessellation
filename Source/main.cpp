@@ -52,7 +52,7 @@ constexpr unsigned int NUM_TESS_LEVELS = 1;
 typedef std::array<TessLevel, NUM_TESS_LEVELS> TessLevels;
 TessLevels tessLevels {{
 //                               {1, 1, 1, 1}, // No tessellation
-                               {3, 3, 3, 3},
+                               {5, 5, 5, 5},
 //                               {10, 10, 10, 10}
                        }};
 
@@ -261,16 +261,16 @@ int main(int argc, char** argv)
 
             Strategy::calculateUVs(*sm_copy, *sm, currTessLevel.processedFaces);
 
+            auto tLevel = tessLevels.at(i);
+            std::stringstream tessLevelStr;
+            tessLevelStr << i << "-" << tLevel.ol0 << "-" << tLevel.ol1 << "-" << tLevel.ol2 << "-" << tLevel.il;
+
             if (EXPORT_TESSELLATED_MESH) {
-                std::ofstream finalOut("../out/beast-export-" + std::to_string(i) + ".obj");
+                std::ofstream finalOut("../out/beast-export-" + tessLevelStr.str() + ".obj");
                 IO::toOBJ(*sm_copy, finalOut, "", "", "");
             }
 
             if (EXPORT_PROCESSED_FACES) {
-                auto tLevel = tessLevels.at(i);
-
-                std::stringstream tessLevelStr;
-                tessLevelStr << i << "-" << tLevel.ol0 << "-" << tLevel.ol1 << "-" << tLevel.ol2 << "-" << tLevel.il;
                 std::ofstream processedFacesOut(outSimplifiedBase + "-processed_faces-" + tessLevelStr.str() + ".bin", std::ios::binary);
 
                 cereal::BinaryOutputArchive oarchive(processedFacesOut);
