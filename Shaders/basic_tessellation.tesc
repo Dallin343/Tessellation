@@ -4,6 +4,11 @@
 // this value controls the size of the input and output arrays
 layout (vertices=3) out;
 
+uniform ivec4 tessellationLevel;
+
+in vec3 vertexNormal[];
+out vec3 VertexNormal[];
+
 in vec4 vertexColor[];
 out vec4 VertexColor[];
 // varying input from vertex shader
@@ -18,15 +23,16 @@ void main()
     gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
     VertexColor[gl_InvocationID] = vertexColor[gl_InvocationID];
     TextureCoord[gl_InvocationID] = TexCoord[gl_InvocationID];
+    VertexNormal[gl_InvocationID] = vertexNormal[gl_InvocationID];
 
     // ----------------------------------------------------------------------
     // invocation zero controls tessellation levels for the entire patch
     if (gl_InvocationID == 0)
     {
-        gl_TessLevelOuter[0] = 5;
-        gl_TessLevelOuter[1] = 5;
-        gl_TessLevelOuter[2] = 5;
+        gl_TessLevelOuter[0] = tessellationLevel.x;
+        gl_TessLevelOuter[1] = tessellationLevel.y;
+        gl_TessLevelOuter[2] = tessellationLevel.z;
 
-        gl_TessLevelInner[0] = 5;
+        gl_TessLevelInner[0] = tessellationLevel.w;
     }
 }

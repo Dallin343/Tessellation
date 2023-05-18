@@ -32,6 +32,7 @@ namespace Strategy {
     void tessellateFace(const ProcessFacePtr& processFace, SurfaceMesh& sm, const TessLevel& tL, TessEdgeMap& edgeVerts,
                         Stats& stats) {
         auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+        auto vSeamMap = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
         auto uvmap = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
@@ -310,6 +311,35 @@ namespace Strategy {
             //Calc face normal based on interpolated vertex normals;
             auto nrm = Utils::compute_face_normal(Utils::toPoint3(v0->origCoords), Utils::toPoint3(v1->origCoords), Utils::toPoint3(v2->origCoords));
             put(fNorms, fd, nrm);
+        }
+
+        auto setSeams = [&](const ProcessEdgePtr& e) {
+            auto& tessVerts = e->tessVerts;
+            std::sort(tessVerts.begin(), tessVerts.end(), [](const TessVertPtr& a, const TessVertPtr& b) {
+                return a->baryCoords.x < b->baryCoords.x;
+            });
+
+            auto v0 = e->v0, v1 = e->v1;
+            auto e0 = sm.edge(sm.halfedge(v1->vd, tessVerts.at(0)->vd)), e1 = sm.edge(sm.halfedge(tessVerts.at(tessVerts.size()-1)->vd, v0->vd));
+            put(eSeamMap, e0, true);
+            put(eSeamMap, e1, true);
+
+            for (int i = 0; i < tessVerts.size() - 1; i++) {
+                auto a = tessVerts.at(i);
+                auto b = tessVerts.at(i+1);
+                put(vSeamMap, a->vd, true);
+                put(eSeamMap, sm.edge(sm.halfedge(a->vd, b->vd)), true);
+            }
+        };
+
+        if (!e01_exists && e01_is_seam) {
+            setSeams(processFace->e01);
+        }
+        if (!e12_exists && e12_is_seam) {
+            setSeams(processFace->e12);
+        }
+        if (!e02_exists && e02_is_seam) {
+            setSeams(processFace->e02);
         }
 
 //        auto calculateSeamUV = [&](const ProcessEdgePtr& e) {

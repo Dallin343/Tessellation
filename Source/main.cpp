@@ -52,7 +52,7 @@ constexpr unsigned int NUM_TESS_LEVELS = 1;
 typedef std::array<TessLevel, NUM_TESS_LEVELS> TessLevels;
 TessLevels tessLevels {{
 //                               {1, 1, 1, 1}, // No tessellation
-                               {5, 5, 5, 5},
+                               {10, 10, 10, 10},
 //                               {10, 10, 10, 10}
                        }};
 
@@ -65,7 +65,7 @@ int main(int argc, char** argv)
     const bool EXPORT_TESSELLATED_MESH = true;
     const bool EXPORT_PROCESSED_FACES = true;
     const bool IMPORT_PROCESSED_FACES = false;
-    const bool EXPORT_TEXTURE = false;
+    const bool EXPORT_TEXTURE = true;
 
     int percent = 10;
     float percentFloat = (float) percent / 100.0f;
@@ -117,13 +117,6 @@ int main(int argc, char** argv)
 
     fNorms = sm->property_map<SM_face_descriptor, Vector>("f:normal").first;
     vNorms = sm->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
-
-    struct TessLevelData {
-        SurfaceMeshPtr mesh;
-        TessEdgeMap processedEdges;
-        ProcessFaceMap processedFaces;
-        VertSet interpolateVerts;
-    };
 
     std::array<TessLevelData, NUM_TESS_LEVELS> allTessMeshes;
     for (int i = 0; i < NUM_TESS_LEVELS; i++) {
@@ -331,7 +324,7 @@ int main(int argc, char** argv)
     //Texture Setup
     int width=8192, height=8192, maxVal;
     float offset;
-    auto tex = Prepare::createTexture(*sm, allTessMeshes.at(0).processedFaces, width, height, offset, maxVal);
+    auto tex = Prepare::createTexture(*sm, allTessMeshes.at(0), width, height, offset, maxVal);
     if (EXPORT_TEXTURE) {
         IO::WriteTexture(tex, width, height, offset, maxVal, "../out/tex.ppm");
     }
@@ -438,6 +431,9 @@ int main(int argc, char** argv)
         tess_shader.setInt("vProjectionMap", 0);
         tess_shader.setInt("texWidth", width);
         tess_shader.setInt("texHeight", height);
+        tess_shader.setVec3("lightPos", glm::vec3(0.0, 0.0, 1000.0));
+        tess_shader.setVec3("viewPos", camera.Position);
+        tess_shader.setVec4("tessellationLevel", 3, 3, 3, 3);
 
         glBindTexture(GL_TEXTURE_2D, texture);
 //        glBindVertexArray(VAO);
@@ -448,10 +444,13 @@ int main(int argc, char** argv)
         plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{150.0f, 0.f, 0.f}));
         plain_shader.setMat4("view", camera.GetViewMatrix());
         plain_shader.setMat4("projection", projection);
+        plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
+        plain_shader.setVec3("viewPos", camera.Position);
 
         oglMesh->draw(plain_shader, OGLMesh::Triangles);
 
         plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{-150.0f, 0.f, 0.f}));
+        plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
         highResOglMesh->draw(plain_shader, OGLMesh::Triangles);
         //dragon_model->Draw(tess_shader);
         //bunny_model->Draw(tess_shader);

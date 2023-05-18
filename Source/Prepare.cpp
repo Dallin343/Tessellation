@@ -157,35 +157,67 @@ namespace Prepare {
         return {offsetVal, maxVal + offsetVal};
     }
 
-    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, ProcessFaceMap& processedFaces, int w, int h, float& offset, int& max) {
+    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, const TessLevelData& data, int w, int h, float& offset, int& max) {
+        auto tess_mesh = data.mesh;
+
         std::vector<std::pair<glm::vec2, glm::vec3>> texCoordVals;
         EdgeSet processedEdges;
-        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+        auto eSeamMap = tess_mesh->property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+//        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
+        auto vSeamMap = tess_mesh->property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
+        auto uvmap = tess_mesh->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        std::unordered_set<SM_vertex_descriptor> processedVerts;
 
-        for (const auto& fd: sm.faces()) {
-            ProcessFacePtr face = processedFaces.at(fd);
-            auto [uv0, uv1, uv2] = face->uvs;
-
-            //Create texCoords for inner vertices
-            for (auto& innerVert : face->innerVerts) {
-                if (innerVert->vd.idx() == 19068) {
-                    int x = 1;
-
+        for (const auto& [fd, face] : data.processedFaces) {
+            for (const auto& tessVert : face->tessVerts) {
+                for (const auto& hd : halfedges_around_source(tessVert->vd, *data.mesh)) {
+                    if (get(eSeamMap, tess_mesh->edge(hd)) || processedVerts.find(tessVert->vd) == processedVerts.end()) {
+                        auto uv = get(uvmap, hd);
+                        auto displace = tessVert->newCoords - tessVert->origCoords;
+                        texCoordVals.emplace_back(Utils::toGLM(uv), displace);
+                    }
+                    processedVerts.insert(tessVert->vd);
                 }
-                auto bary = innerVert->baryCoords;
-                auto uv = Utils::toGLM(uv0) * bary.x + Utils::toGLM(uv1) * bary.y + Utils::toGLM(uv2) * bary.z;
-                auto displace = innerVert->newCoords - innerVert->origCoords;
-                if (glm::length(displace) > 60.0f) {
-                    testing.emplace_back(innerVert, displace);
-                }
-                texCoordVals.emplace_back(uv, displace);
             }
-
-            //Create texCoords for edge vertices, checking if they are on a seam.
-            processEdge(face->e01, face, eSeamMap, processedEdges, texCoordVals);
-            processEdge(face->e12, face, eSeamMap, processedEdges, texCoordVals);
-            processEdge(face->e02, face, eSeamMap, processedEdges, texCoordVals);
         }
+//
+//        for (const auto& hd : tess_mesh->halfedges()) {
+//            auto fd = tess_mesh->face(hd);
+//            auto vd = tess_mesh->source(hd);
+//            ProcessFacePtr face = data.processedFaces.at(fd);
+//            auto& tessVert = face->vdToTessVert.at(vd);
+//            auto displace = tessVert->newCoords - tessVert->origCoords;
+//            auto uv = get(uvmap, hd);
+//
+//            if (get(eSeamMap, sm.edge(hd)) || processedVerts.find(vd) == processedVerts.end()) {
+//                texCoordVals.emplace_back(Utils::toGLM(uv), displace);
+//            }
+//            processedVerts.insert(vd);
+//        }
+        int s = texCoordVals.size();
+        int a = processedVerts.size();
+        int n = tess_mesh->number_of_vertices();
+
+//        for (const auto& fd: sm.faces()) {
+//            ProcessFacePtr face = data.processedFaces.at(fd);
+//            auto [uv0, uv1, uv2] = face->uvs;
+//
+//            //Create texCoords for inner vertices
+//            for (auto& innerVert : face->innerVerts) {
+//                auto bary = innerVert->baryCoords;
+//                auto uv = Utils::toGLM(uv0) * bary.x + Utils::toGLM(uv1) * bary.y + Utils::toGLM(uv2) * bary.z;
+//                auto displace = innerVert->newCoords - innerVert->origCoords;
+//                if (glm::length(displace) > 60.0f) {
+//                    testing.emplace_back(innerVert, displace);
+//                }
+//                texCoordVals.emplace_back(uv, displace);
+//            }
+//
+//            //Create texCoords for edge vertices, checking if they are on a seam.
+//            processEdge(face->e01, face, eSeamMap, processedEdges, texCoordVals);
+//            processEdge(face->e12, face, eSeamMap, processedEdges, texCoordVals);
+//            processEdge(face->e02, face, eSeamMap, processedEdges, texCoordVals);
+//        }
 
         //Find the minimum difference between values
         //glm::vec2 minDiff = findMinDiff(texCoordVals);

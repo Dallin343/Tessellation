@@ -13,9 +13,13 @@ in vec4 VertexColor[];
 // received from Tessellation Control Shader - all texture coordinates for the patch vertices
 in vec2 TextureCoord[];
 
+in vec3 VertexNormal[];
+
 // send to Fragment Shader for coloring
 //out float Height;
 out vec4 vertexColor;
+out vec3 normal;
+out vec3 FragPos;
 
 void main()
 {
@@ -71,7 +75,16 @@ void main()
 //        vertexColor = normalize(vec4(test.xyz, 1.0));
     }
 
+    vec3 n0 = VertexNormal[0];
+    vec3 n1 = VertexNormal[1];
+    vec3 n2 = VertexNormal[2];
+
+    vec4 uVec = p1 - p0;
+    vec4 vVec = p2 - p0;
+    normal = normalize(n0*u + n1*v + n2*w);
+
     // ----------------------------------------------------------------------
     // output patch point position in clip space
     gl_Position = projection * view * model * p;
+    FragPos = vec3(model * vec4(p.xyz, 1.0));
 }

@@ -278,4 +278,11 @@ namespace glm {
     }
 }
 
+struct TessLevelData {
+    SurfaceMeshPtr mesh;
+    TessEdgeMap processedEdges;
+    ProcessFaceMap processedFaces;
+    VertSet interpolateVerts;
+};
+
 #endif //TESSELLATION_MESHIMPL_H
