@@ -74,11 +74,13 @@ namespace IO {
             }
         }
 
-        for (auto edge : sm.edges()) {
-            if (get(eSeamMap, edge)) {
-                auto src = sm.source(sm.halfedge(edge));
-                auto tgt = sm.target(sm.halfedge(edge));
-                eSeams.emplace_back(src, tgt);
+        if (!outSeams.empty()) {
+            for (auto edge : sm.edges()) {
+                if (get(eSeamMap, edge)) {
+                    auto src = sm.source(sm.halfedge(edge));
+                    auto tgt = sm.target(sm.halfedge(edge));
+                    eSeams.emplace_back(src, tgt);
+                }
             }
         }
 
@@ -146,6 +148,73 @@ namespace IO {
         }
     }
 
+    void toOBJ(const SurfaceMesh& sm, std::ostream& out) {
+        std::unordered_map<SM_vertex_descriptor, unsigned int> VDtoVIdx;
+
+        std::vector<Point_3> v;
+        std::vector<Vector> vn;
+        std::vector<std::string> f;
+
+        v.reserve(sm.number_of_vertices());
+        vn.reserve(sm.number_of_vertices());
+
+        auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
+
+        //move vertices pos to v
+        for (auto vert : sm.vertices()) {
+            VDtoVIdx.insert({vert, v.size()});
+            v.push_back(sm.point(vert));
+        }
+
+        for (auto face : sm.faces()) {
+            auto nrmIdx = vn.size();
+            vn.push_back(get(fNorms, face));
+
+            std::stringstream ss;
+            int count = 0;
+            for (auto hd : sm.halfedges_around_face(sm.halfedge(face))) {
+//                count++;
+//                if (count > 3) {
+//                    int x = 1;
+//                }
+//                if (hd.idx() == 112807) {
+//                    int num = sm.number_of_faces();
+//                    int numrem = sm.number_of_removed_faces();
+////                    std::cout << "Edge Error - " << VDtoVIdx.at(sm.source(hd)) << ", " << VDtoVIdx.at(sm.target(hd)) << "\n";
+//                }
+//
+//                if (VDtoVIdx.find(sm.source(hd)) == VDtoVIdx.end()) {
+//                    int t = sm.is_removed(hd);
+//                    int h = sm.is_removed(sm.source(hd));
+//                    int e = sm.is_removed(sm.edge(hd));
+//                    int f = sm.is_removed(sm.face(hd));
+//                    int x = 1;
+//                } else {
+                    auto s = sm.source(hd);
+                    ss << " " << VDtoVIdx.at(sm.source(hd)) + 1 << "//" << nrmIdx + 1;
+//                }
+            }
+
+            f.push_back(ss.str());
+        }
+
+        //Write to file
+        for (auto pos : v) {
+            out << std::setprecision(std::numeric_limits<double>::max_digits10) <<
+                "v " << pos.x() << " " << pos.y() << " " << pos.z() << "\n";
+        }
+
+//    out << "vn 0.0 0.0 0.0\n";
+        for (auto nrm : vn) {
+            out << "vn " << nrm.x() << " " << nrm.y() << " " << nrm.z() << "\n";
+        }
+
+        for (const auto& fStr : f) {
+            out << "f" << fStr << "\n";
+        }
+        out.flush();
+    }
+
     std::tuple<SurfaceMeshPtr, VdMap, VdHdMap> fromOBJ(const std::string& filename, const std::string& vdMapFilename, const std::string& hdMapFilename, const std::string& seamsFilename) {
         SurfaceMeshPtr surfaceMesh = LoadMesh(filename);
         ReadUV(surfaceMesh, filename);
@@ -193,7 +262,36 @@ namespace IO {
         auto vNorms = surfaceMesh->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
         CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
 
+        auto faceFeatures = surfaceMesh->add_property_map<SM_face_descriptor, std::unordered_set<FeaturePointPtr>>("f:features", {}).first;
+
         return std::make_pair(surfaceMesh, seamMesh);
+    }
+
+    SurfaceMeshPtr fromOBJ(const std::string& filename, bool hasUV, bool lightmapUV) {
+        SurfaceMeshPtr surfaceMesh = LoadMesh(filename);
+
+        bool v_on_seam_default = false;
+        bool e_on_seam_default = false;
+
+        if (hasUV) {
+            ReadUV(surfaceMesh, filename);
+            if (lightmapUV) {
+                v_on_seam_default = true;
+                e_on_seam_default = true;
+            }
+        }
+
+        surfaceMesh->add_property_map<SM_vertex_descriptor, bool>("v:on_seam", v_on_seam_default);
+        surfaceMesh->add_property_map<SM_edge_descriptor, bool>("e:on_seam", e_on_seam_default);
+
+        auto edgeCostMap = surfaceMesh->add_property_map<SM_edge_descriptor, double>("e:collapse_cost", 0.0).first;
+        auto vertexQMap = surfaceMesh->add_property_map<SM_vertex_descriptor, SymmetricMatrix>("v:q", {}).first;
+        auto faceFeatures = surfaceMesh->add_property_map<SM_face_descriptor, std::unordered_set<FeaturePointPtr>>("f:features", {}).first;
+        auto fNorms = surfaceMesh->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
+        auto vNorms = surfaceMesh->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
+        CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
+
+        return surfaceMesh;
     }
 
     SurfaceMeshPtr LoadMesh(const std::string& filename) {

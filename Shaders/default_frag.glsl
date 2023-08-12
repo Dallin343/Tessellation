@@ -2,6 +2,7 @@
 
 uniform vec3 lightPos;
 uniform vec3 viewPos;
+uniform bool inWireframe;
 
 out vec4 FragColor;
 in vec4 vertexColor; // the input variable from the vertex shader (same name and same type)
@@ -12,6 +13,10 @@ in vec3 FragPos;
 
 void main()
 {
+    if (inWireframe) {
+        FragColor = vertexColor;
+        return;
+    }
     //Ambient
     float ambientStrength = 0.1;
     vec3 lightColor = vec3(1.0, 1.0, 1.0);

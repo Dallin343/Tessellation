@@ -12,11 +12,12 @@ namespace Prepare {
     typedef std::unordered_set<SM_edge_descriptor> EdgeSet;
 
     struct VertexData {
-        VertexData(const glm::vec3 &pos, const glm::vec3 &nrm, const glm::vec2 &texCoords) : pos(pos), nrm(nrm),
+        VertexData(const glm::vec3 &pos, const glm::vec3 &nrm, const glm::vec3 &col, const glm::vec2 &texCoords) : pos(pos), nrm(nrm), col(col),
                                                                                                 texCoords(texCoords) {}
 
         glm::vec3 pos;
         glm::vec3 nrm;
+        glm::vec3 col;
         glm::vec2 texCoords;
     };
 

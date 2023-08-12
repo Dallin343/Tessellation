@@ -10,3 +10,9 @@
 [submodule "Vendor/cereal"]
 	path = Vendor/cereal
 	url = https://github.com/USCiLab/cereal
+[submodule "Vendor/spdlog"]
+	path = Vendor/spdlog
+	url = https://github.com/gabime/spdlog
+[submodule "Vendor/mapping"]
+	path = Vendor/mapping
+	url = https://github.com/patr-schm/surface-maps-via-adaptive-triangulations

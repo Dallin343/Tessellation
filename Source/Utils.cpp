@@ -6,7 +6,7 @@
 #include <igl/gaussian_curvature.h>
 
 namespace Utils {
-    std::optional<glm::vec3> barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2) {
+    glm::vec3 barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2) {
         glm::vec3 u = t1 - t0;
         glm::vec3 v = t2 - t0;
         glm::vec3 n = glm::cross(u, v);
@@ -15,13 +15,7 @@ namespace Utils {
         double gamma = glm::dot(glm::cross(u, w), n) / glm::dot(n, n);
         double beta = glm::dot(glm::cross(w, v), n) / glm::dot(n, n);
         double alpha = 1.0 - gamma - beta;
-        bool a_check = alpha >= 0.0 && alpha <= 1.0;
-        bool b_check = beta >= 0.0 && beta <= 1.0;
-        bool g_check = gamma >= 0.0 && gamma <= 1.0;
-        if (!a_check || !b_check || !g_check) {
-            return std::nullopt;
-        }
-        return std::make_optional<glm::vec3>(alpha, beta, gamma);
+        return {alpha, beta, gamma};
     }
 
     glm::vec3 barycentric(glm::vec2 p, glm::vec2 a, glm::vec2 b, glm::vec2 c) {
@@ -38,6 +32,11 @@ namespace Utils {
         double w = (d00 * d21 - d01 * d20) / denom;
         double u = 1.0 - v - w;
         return {u, v, w};
+    }
+
+    double barycentric_distance(glm::vec3 p, glm::vec3 q) {
+        auto d = p - q;
+        return glm::sqrt(glm::pow(d.x,2) + glm::pow(d.y,2) + glm::pow(d.z,2));
     }
 
     double barycentric_distance(glm::vec3 p, glm::vec3 q, double t1t2, double t0t2, double t0t1) {
@@ -64,6 +63,19 @@ namespace Utils {
         Vector fNrm = normalize(CGAL::cross_product(p0, p1));
 
         return fNrm;
+    }
+
+    Vector compute_vertex_normal(const SurfaceMesh& sm, const SM_vertex_descriptor& vd) {
+        Vector vertexNorm = {0.0, 0.0, 0.0};
+        for (const auto f : sm.faces_around_target(sm.halfedge(vd))) {
+            std::array<Point_3, 3> vertices;
+            int i = 0;
+            for (auto v : sm.vertices_around_face(sm.halfedge(f))) {
+                vertices.at(i++) = sm.point(v);
+            }
+            vertexNorm += compute_face_normal(vertices.at(0), vertices.at(1), vertices.at(2));
+        }
+        return normalize(vertexNorm);
     }
 
     Vector lerp(const Vector& a, const Vector& b, double t) {
@@ -157,6 +169,8 @@ namespace Utils {
                 return "PVEdgeCase";
             case ProjectValidate:
                 return "ProjectValidate";
+            case InterpolateUnmatched:
+                return "InterpolateUnmatched";
             case Undone:
                 return "Undone";
             case Never:
@@ -225,5 +239,31 @@ namespace Utils {
 //    SMP::IO::output_uvmap_to_off(*mesh, bhd, uvmap, out);
 
         return mesh;
+    }
+
+    glm::vec3
+    align_barycentric(const BarycentricPoint &point, const SM_vertex_descriptor &alignVd) {
+        if (alignVd.idx() == point.v0) {
+            return {point.alpha, point.beta, point.gamma};
+        }
+        else if (alignVd.idx() == point.v1) {
+            return {point.beta, point.gamma, point.alpha};
+        }
+        else {
+            return {point.gamma, point.alpha, point.beta};
+        }
+    }
+
+    glm::vec3
+    align_barycentric(const SMBarycentricPoint &point, const SM_vertex_descriptor &alignVd) {
+        if (alignVd == point.v0) {
+            return {point.alpha, point.beta, point.gamma};
+        }
+        else if (alignVd == point.v1) {
+            return {point.beta, point.gamma, point.alpha};
+        }
+        else {
+            return {point.gamma, point.alpha, point.beta};
+        }
     }
 }

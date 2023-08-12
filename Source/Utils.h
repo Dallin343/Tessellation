@@ -5,16 +5,21 @@
 #ifndef TESSELLATION_UTILS_H
 #define TESSELLATION_UTILS_H
 #include "MeshImpl.h"
+#include "Mapping.h"
 #include <glm/glm.hpp>
 #include <optional>
 
 namespace Utils {
-    std::optional<glm::vec3> barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2);
+    glm::vec3 barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2);
     glm::vec3 barycentric(glm::vec2 p, glm::vec2 a, glm::vec2 b, glm::vec2 c);
+    glm::vec3 align_barycentric(const BarycentricPoint& point, const SM_vertex_descriptor &alignVd);
+    glm::vec3 align_barycentric(const SMBarycentricPoint& point, const SM_vertex_descriptor &alignVd);
 
+    double barycentric_distance(glm::vec3 p, glm::vec3 q);
     double barycentric_distance(glm::vec3 p, glm::vec3 q, double t1t2, double t0t2, double t0t1);
     Vector compute_face_normal(const TessFacePtr& face, const SurfaceMesh& sm);
     Vector compute_face_normal(const Point_3& v0, const Point_3& v1, const Point_3& v2);
+    Vector compute_vertex_normal(const SurfaceMesh& sm, const SM_vertex_descriptor& vd);
 
     Vector lerp(const Vector& a, const Vector& b, double t);
     Vector lerp(const Vector& A, const Vector& B, const Vector&C, double tA, double tB, double tC);

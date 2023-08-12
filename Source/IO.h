@@ -17,10 +17,13 @@ namespace IO {
     }
 
     void toOBJ(const SurfaceMesh& sm, std::ostream& out, const std::string& outVD, const std::string& outHD, const std::string& outSeams);
+    void toOBJ(const SurfaceMesh& sm, std::ostream& out);
+
     //Convenience method
     std::pair<SurfaceMeshPtr, SeamMeshPtr> fromOBJ(const std::string& filename, const std::string& seamFilename);
     std::tuple<SurfaceMeshPtr, VdMap, VdHdMap>  fromOBJ(const std::string& filename, const std::string& vdMapFilename,
                                                         const std::string& hdMapFilename, const std::string& seamsFilename);
+    SurfaceMeshPtr fromOBJ(const std::string& filename, bool hasUV = false, bool lightmapUV = false);
 
     SurfaceMeshPtr LoadMesh(const std::string& filename);
 

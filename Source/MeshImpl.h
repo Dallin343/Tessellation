@@ -78,6 +78,190 @@ typedef SurfaceMesh::Property_map<SM_vertex_descriptor, Vector>   Normal_vertex_
 typedef SurfaceMesh::Property_map<SM_face_descriptor, Vector>   Normal_face_pmap;
 typedef SurfaceMesh::Property_map<SM_vertex_descriptor, double> Gauss_vertex_pmap;
 
+
+////////// Custom Simplification
+class SymmetricMatrix {
+
+public:
+
+    // Constructor
+
+    SymmetricMatrix(double c = 0) {
+        for (double &i : m) i = c;
+    }
+
+    SymmetricMatrix(	double m11, double m12, double m13, double m14,
+                        double m22, double m23, double m24,
+                        double m33, double m34,
+                        double m44) {
+        m[0] = m11;  m[1] = m12;  m[2] = m13;  m[3] = m14;
+        m[4] = m22;  m[5] = m23;  m[6] = m24;
+        m[7] = m33;  m[8] = m34;
+        m[9] = m44;
+    }
+
+    // Make plane
+
+    SymmetricMatrix(double a,double b,double c,double d)
+    {
+        m[0] = a*a;  m[1] = a*b;  m[2] = a*c;  m[3] = a*d;
+        m[4] = b*b;  m[5] = b*c;  m[6] = b*d;
+        m[7 ] =c*c; m[8 ] = c*d;
+        m[9 ] = d*d;
+    }
+
+    double operator[](int c) const { return m[c]; }
+
+    // Determinant
+
+    double det(	int a11, int a12, int a13,
+                   int a21, int a22, int a23,
+                   int a31, int a32, int a33)
+    {
+        double det =  m[a11]*m[a22]*m[a33] + m[a13]*m[a21]*m[a32] + m[a12]*m[a23]*m[a31]
+                      - m[a13]*m[a22]*m[a31] - m[a11]*m[a23]*m[a32]- m[a12]*m[a21]*m[a33];
+        return det;
+    }
+
+    SymmetricMatrix operator+(const SymmetricMatrix& n) const
+    {
+        return SymmetricMatrix( m[0]+n[0],   m[1]+n[1],   m[2]+n[2],   m[3]+n[3],
+                                m[4]+n[4],   m[5]+n[5],   m[6]+n[6],
+                                m[ 7]+n[ 7], m[ 8]+n[8 ],
+                                m[ 9]+n[9 ]);
+    }
+
+    SymmetricMatrix& operator+=(const SymmetricMatrix& n)
+    {
+        m[0]+=n[0];   m[1]+=n[1];   m[2]+=n[2];   m[3]+=n[3];
+        m[4]+=n[4];   m[5]+=n[5];   m[6]+=n[6];   m[7]+=n[7];
+        m[8]+=n[8];   m[9]+=n[9];
+        return *this;
+    }
+
+    std::array<double, 10> m;
+};
+
+struct FeaturePoint {
+    FeaturePoint(Point_3 p, Vector n) : p(p), n(n) {};
+    Point_3 p;
+    Vector n;
+};
+typedef std::shared_ptr<FeaturePoint> FeaturePointPtr;
+typedef SurfaceMesh::Property_map<SM_face_descriptor, std::unordered_set<FeaturePointPtr>> Feature_face_pmap;
+typedef SurfaceMesh::Property_map<SM_edge_descriptor, double> Edge_cost_pmap;
+typedef SurfaceMesh::Property_map<SM_vertex_descriptor, SymmetricMatrix> Vertex_Q_pmap;
+
+struct PairCost {
+    PairCost(SM_vertex_descriptor src, SM_vertex_descriptor tgt, double cost) : pair(src, tgt), cost(cost) {}
+
+    std::pair<SM_vertex_descriptor, SM_vertex_descriptor> pair;
+    double cost;
+};
+
+class MinCompare
+{
+public:
+    bool operator()(const PairCost l, const PairCost r) const {
+        return l.cost > r.cost;
+    }
+};
+
+class EdgeCostHeap : public std::priority_queue<PairCost, std::vector<PairCost>, MinCompare>
+{
+private:
+    bool _remove(const SM_vertex_descriptor& searchVd, bool& need_to_heap) {
+        auto it = std::find_if(this->c.begin(), this->c.end(), [&](const PairCost& item) {
+            return item.pair.first == searchVd || item.pair.second == searchVd;
+        });
+
+        if (it == this->c.end()) {
+            return false;
+        }
+        if (it == this->c.begin()) {
+            // deque the top element
+            this->pop();
+        }
+        else {
+            // remove element and re-heap
+            this->c.erase(it);
+            need_to_heap = true;
+        }
+        return true;
+    }
+
+    bool _remove(const SM_vertex_descriptor& searchVd1, const SM_vertex_descriptor& searchVd2) {
+        auto it = std::find_if(this->c.begin(), this->c.end(), [&](const PairCost& item) {
+            return (item.pair.first == searchVd1 && item.pair.second == searchVd2) ||
+                    (item.pair.first == searchVd2 && item.pair.second == searchVd1);
+        });
+
+        if (it == this->c.end()) {
+            return false;
+        }
+        else if (it == this->c.begin()) {
+            // deque the top element
+            this->pop();
+        }
+        else {
+            // remove element and re-heap
+            this->c.erase(it);
+            return true;
+        }
+        return false;
+    }
+public:
+
+    bool remove(const SM_vertex_descriptor& searchVd, bool remove_all) {
+        bool need_to_heap = false;
+        if (remove_all) {
+            while (this->_remove(searchVd, need_to_heap)) {}
+        }
+        else {
+            this->_remove(searchVd, need_to_heap);
+        }
+
+        if (need_to_heap) {
+            std::make_heap(this->c.begin(), this->c.end(), this->comp);
+        }
+        return true;
+    }
+
+    bool remove(const SM_vertex_descriptor& searchVd1, const SM_vertex_descriptor& searchVd2) {
+        if (this->_remove(searchVd1, searchVd2)) {
+            std::make_heap(this->c.begin(), this->c.end(), this->comp);
+        }
+        return true;
+    }
+
+    bool remove(const std::vector<SM_vertex_descriptor>& searchVds) {
+        bool need_to_heap = false;
+        for (const auto& searchVd : searchVds) {
+            this->_remove(searchVd, need_to_heap);
+        }
+
+        if (need_to_heap) {
+            std::make_heap(this->c.begin(), this->c.end(), this->comp);
+        }
+        return true;
+    }
+
+    bool remove(const std::vector<std::pair<SM_vertex_descriptor, SM_vertex_descriptor>>& searchVds) {
+        bool need_to_heap = false;
+        for (const auto& [vd1, vd2] : searchVds) {
+            if (this->_remove(vd1, vd2)) {
+                need_to_heap = true;
+            }
+        }
+
+        if (need_to_heap) {
+            std::make_heap(this->c.begin(), this->c.end(), this->comp);
+        }
+        return true;
+    }
+};
+//////////
+
 typedef CGAL::Seam_mesh<SurfaceMesh, Seam_edge_pmap, Seam_vertex_pmap>  SeamMesh;
 typedef boost::graph_traits<SeamMesh>::vertex_descriptor                    vertex_descriptor;
 typedef boost::graph_traits<SeamMesh>::halfedge_descriptor                  halfedge_descriptor;
@@ -98,24 +282,63 @@ typedef SMS::GarlandHeckbert_probabilistic_triangle_policies<SurfaceMesh, Kernel
 struct Seam_is_constrained_edge_map
 {
     const SeamMesh* seamMesh_ptr;
-    const Seam_vertex_pmap& vSeamMap;
-    const Seam_edge_pmap& eSeamMap;
+    Feature_face_pmap& faceFeatures;
+    const UV_pmap& uvmap;
     typedef SM_edge_descriptor                                       key_type;
     typedef bool                                                  value_type;
     typedef value_type                                            reference;
     typedef boost::readable_property_map_tag                      category;
-    Seam_is_constrained_edge_map(const SeamMesh& seamMesh, const Seam_vertex_pmap& vSeamMap, const Seam_edge_pmap& eSeamMap) :
-    seamMesh_ptr(&seamMesh), vSeamMap(vSeamMap), eSeamMap(eSeamMap) {}
+    Seam_is_constrained_edge_map(const SeamMesh& seamMesh, Feature_face_pmap& faceFeatures, const UV_pmap& uvmap) :
+    seamMesh_ptr(&seamMesh), faceFeatures(faceFeatures), uvmap(uvmap) {
+    }
 
     friend value_type get(const Seam_is_constrained_edge_map& m, const key_type& edge) {
-//        auto sm = m.seamMesh_ptr->mesh();
+        const int FEATS = 10;
+
+        auto& sm = m.seamMesh_ptr->mesh();
 //        auto v = get(m.vSeamMap, sm.source(sm.halfedge(edge))) || get(m.vSeamMap, sm.target(sm.halfedge(edge)));
 //        auto e = get(m.eSeamMap, edge);
-        auto result = m.seamMesh_ptr->has_on_seam(edge);
-        if (result) {
-            int x = 0;
+        auto f1 = sm.face(sm.halfedge(edge));
+        auto f2 = sm.face(sm.opposite(sm.halfedge(edge)));
+        auto f1Points = get(m.faceFeatures, f1);
+        auto f2Points = get(m.faceFeatures, f2);
+        if (f1Points.size() != 0 || f2Points.size() != 0) {
+            int lll = 0;
         }
-        return result;
+        if (f1Points.size() >= FEATS || f2Points.size() >= FEATS) {
+            return true;
+        } else {
+            return false;
+//            std::array<Point_2, 3> f1_uvs, f2_uvs;
+//            std::list<Vertex_handle> vertexList;
+//            int i = 0;
+//            for (auto hd : sm.halfedges_around_face(sm.halfedge(edge))) {
+//                f1_uvs.at(i++) = get(m.uvmap, hd);
+//            }
+//
+//            i = 0;
+//            for (auto hd : sm.halfedges_around_face(sm.opposite(sm.halfedge(edge)))) {
+//                f2_uvs.at(i++) = get(m.uvmap, hd);
+//            }
+//
+//            bool ret = false;
+//            m.pointSet.range_search(f1_uvs.at(0), f1_uvs.at(1), f1_uvs.at(2), std::back_inserter(vertexList));
+//            if (vertexList.size() >= FEATS) {
+//                m.finishedFaces.insert(f1);
+//                ret = true;
+//            }
+//
+//            vertexList.clear();
+//            m.pointSet.range_search(f2_uvs.at(0), f2_uvs.at(1), f2_uvs.at(2), std::back_inserter(vertexList));
+//            if (vertexList.size() >= FEATS) {
+//                m.finishedFaces.insert(f2);
+//                ret = true;
+//            }
+//            return ret;
+        }
+
+//        auto result = m.seamMesh_ptr->has_on_seam(edge);
+//        return result;
     }
 };
 

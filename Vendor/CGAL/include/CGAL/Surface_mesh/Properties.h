@@ -190,6 +190,7 @@ public:
     /// Access the i'th element. No range check is performed!
     reference operator[](std::size_t _idx)
     {
+        if (_idx >= data_.size()) std::cout << "SIZE: " << data_.size() << "\n";
         CGAL_assertion( _idx < data_.size() );
         return data_[_idx];
     }

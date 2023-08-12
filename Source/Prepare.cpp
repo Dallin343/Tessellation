@@ -17,7 +17,9 @@ namespace Prepare {
         Seam_vertex_pmap vSeamMap = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
         Seam_edge_pmap eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
         Normal_vertex_pmap vNormMap = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
-        UV_pmap uvMap = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+
+        auto [vColorMap, hasColor] = sm.property_map<SM_vertex_descriptor, glm::vec3>("v:color");
+        auto [uvMap, hasUVMap] = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
 
         //Process vertices,
         for (const SM_vertex_descriptor& vd : sm.vertices()) {
@@ -33,7 +35,12 @@ namespace Prepare {
                         glm::vec3 pos = Utils::toGLM(sm.point(vd));
                         glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
                         glm::vec2 texCoords = Utils::toGLM(uv);
-                        data.vertices.emplace_back(pos, nrm, texCoords);
+
+                        glm::vec3 color = {};
+                        if (hasColor) {
+                            color = get(vColorMap, vd);
+                        }
+                        data.vertices.emplace_back(pos, nrm, color, texCoords);
                     }
                 }
 
@@ -55,12 +62,19 @@ namespace Prepare {
                 for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
                     if (first) {
                         first = false;
-                        Point_2 uv = get(uvMap, hd);
 
                         glm::vec3 pos = Utils::toGLM(sm.point(vd));
                         glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
-                        glm::vec2 texCoords = Utils::toGLM(uv);
-                        data.vertices.emplace_back(pos, nrm, texCoords);
+                        glm::vec2 texCoords = {};
+                        if (hasUVMap) {
+                            Point_2 uv = get(uvMap, hd);
+                            texCoords = Utils::toGLM(uv);
+                        }
+                        glm::vec3 color = {};
+                        if (hasColor) {
+                            color = get(vColorMap, vd);
+                        }
+                        data.vertices.emplace_back(pos, nrm, color, texCoords);
                     }
                     hdToVertIdx.insert({hd, idx});
                 }
@@ -160,7 +174,9 @@ namespace Prepare {
     std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, const TessLevelData& data, int w, int h, float& offset, int& max) {
         auto tess_mesh = data.mesh;
 
-        std::vector<std::pair<glm::vec2, glm::vec3>> texCoordVals;
+        typedef std::vector<std::pair<glm::vec2, glm::vec3>> UV_Displace_Vec;
+        UV_Displace_Vec texCoordVals;
+        std::unordered_map<SM_vertex_descriptor, UV_Displace_Vec> texCoordValsMap{};
         EdgeSet processedEdges;
         auto eSeamMap = tess_mesh->property_map<SM_edge_descriptor, bool>("e:on_seam").first;
 //        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
@@ -168,17 +184,38 @@ namespace Prepare {
         auto uvmap = tess_mesh->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
         std::unordered_set<SM_vertex_descriptor> processedVerts;
 
+        unsigned numTexCoords = 0;
+
         for (const auto& [fd, face] : data.processedFaces) {
             for (const auto& tessVert : face->tessVerts) {
+                if (processedVerts.find(tessVert->vd) != processedVerts.end()) {
+                    continue;
+                }
+
+                if (texCoordValsMap.find(tessVert->vd) == texCoordValsMap.end()) {
+                    texCoordValsMap.insert({tessVert->vd, {}});
+                }
+                auto& texCoordVec = texCoordValsMap.at(tessVert->vd);
                 for (const auto& hd : halfedges_around_source(tessVert->vd, *data.mesh)) {
-                    if (get(eSeamMap, tess_mesh->edge(hd)) || processedVerts.find(tessVert->vd) == processedVerts.end()) {
-                        auto uv = get(uvmap, hd);
+                    auto uv = get(uvmap, hd);
+                    auto it = std::find_if(texCoordVec.begin(), texCoordVec.end(), [&](const auto& pair) {
+                        return glm::all(glm::lessThanEqual(glm::abs(Utils::toGLM(uv) - pair.first), {0.00001, 0.00001}));
+                    });
+
+                    if (it == std::end(texCoordVec)) {
+                        uv = get(uvmap, hd);
                         auto displace = tessVert->newCoords - tessVert->origCoords;
-                        texCoordVals.emplace_back(Utils::toGLM(uv), displace);
+                        texCoordVec.emplace_back(Utils::toGLM(uv), displace);
+                        numTexCoords++;
                     }
                     processedVerts.insert(tessVert->vd);
                 }
             }
+        }
+
+        texCoordVals.reserve(numTexCoords);
+        for (const auto& [vd, vec] : texCoordValsMap) {
+            texCoordVals.insert(texCoordVals.end(), vec.begin(), vec.end());
         }
 //
 //        for (const auto& hd : tess_mesh->halfedges()) {

@@ -9,6 +9,8 @@ uniform mat4 model;           // the model matrix
 uniform mat4 view;            // the view matrix
 uniform mat4 projection;      // the projection matrix
 
+uniform float displacementThreshold;
+
 in vec4 VertexColor[];
 // received from Tessellation Control Shader - all texture coordinates for the patch vertices
 in vec2 TextureCoord[];
@@ -53,10 +55,9 @@ void main()
 
     // bilinearly interpolate position coordinate across patch
     vec4 p = p0*u + p1*v + p2*w;
-//    p += vec4(vProject.xyz, 0.0);
+//    p += vec4(test.xyz, 0.0);
     float testLen = length(test.xyz);
-    float thresh = 60.0;
-//    if (testLen < thresh) {
+//    if (testLen < displacementThreshold) {
         p += vec4(test.xyz, 0.0);
 //    }
 
@@ -67,9 +68,14 @@ void main()
 //    vertexColor = normalize(vec4(u, v, w, 1.0));
 /*    if (test.xyz == vProject.xyz) {
         vertexColor = vec4(0.0, 1.0, 0.0, 1.0);
-    } else */if (test.xyz == vec3(0.0, 0.0, 0.0)) {
+    } else */
+    if (test.xyz == vec3(0.0, 0.0, 0.0)) {
         vertexColor = vec4(0.0, 0.0, 0.0, 1.0);
-    } else {
+    }
+//    else if (testLen >= displacementThreshold) {
+//        vertexColor = vec4(1.0, 0.0, 0.0, 1.0);
+//    }
+    else {
 //        vertexColor = vec4(0.0, 0.0, 0.3, 1.0);
         vertexColor = c0*u + c1*v + c2*w;
 //        vertexColor = normalize(vec4(test.xyz, 1.0));

@@ -14,7 +14,10 @@ include_directories(
         Vendor/indicators
         Vendor/lodepng
         Vendor/cereal/include
+        Vendor/spdlog/include
+        Vendor/tclap/include
         Source
+#        Source/FastDecimator
 )
 
 set(CGAL_DIR Vendor/CGAL)
@@ -46,6 +49,11 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(Vendor/glfw)
 
+add_subdirectory(Vendor/spdlog)
+
+#set(SURFACEMAPS_BUILD_APPS ON CACHE BOOL "" FORCE)
+#add_subdirectory(Vendor/mapping)
+
 
 add_executable(Tessellation
         Source/main.cpp
@@ -66,7 +74,17 @@ add_executable(Tessellation
         Source/stb.h
         Vendor/lodepng/lodepng.cpp
         Vendor/lodepng/lodepng.h
-        )
+        Source/Simplify.h
+        Source/Decimator.cpp
+        Source/Decimator.h
+        Source/Debug.h
+        Source/Log.cpp
+        Source/Log.h
+        Source/Mapping.h
+#        Source/FastDecimator/Heap.h
+#        Source/FastDecimator/Mesh.h
+#        Source/FastDecimator/Mesh.cpp
+        Source/Mapping.cpp)
 
 if(CGAL_Qt5_FOUND)
 target_link_libraries(Tessellation PRIVATE
@@ -77,6 +95,7 @@ target_link_libraries(Tessellation PRIVATE
         Hungarian
         CGAL::CGAL
         CGAL::CGAL_Core
+        spdlog::spdlog
 #        CGAL::CGAL_Basic_viewer
         )
 else()
@@ -88,6 +107,7 @@ else()
             Hungarian
             CGAL::CGAL
             CGAL::CGAL_Core
+            spdlog::spdlog
             #        CGAL::CGAL_Basic_viewer
             )
 endif()

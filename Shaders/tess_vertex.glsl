@@ -2,7 +2,8 @@
 
 layout (location=0) in vec3 position;
 layout (location=1) in vec3 normal;
-layout (location=2) in vec2 texCoords;
+layout (location=2) in vec3 _vertexColor;
+layout (location=3) in vec2 texCoords;
 
 //uniform sampler2D vProjectionMap;
 //uniform mat4 model;
@@ -17,7 +18,7 @@ void main() {
 //    gl_Position = projection * view * model * vec4(position, 1.0);
     gl_Position = vec4(position, 1.0);
 //    vertexColor = texture(vProjectionMap, texCoords);
-    vertexColor = vec4(0.6, 0.6, 0.6, 1.0);
+    vertexColor = vec4(_vertexColor, 1.0);
     TexCoord = texCoords;
     vertexNormal = normal;
 //    vertexColor = vec4(0.0,0.0,0.0, 1.0);
