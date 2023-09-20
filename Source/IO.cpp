@@ -4,6 +4,7 @@
 
 #include "IO.h"
 #include "lodepng.h"
+#include <cstring>
 
 namespace IO {
     template<typename T, typename V>
@@ -171,28 +172,9 @@ namespace IO {
             vn.push_back(get(fNorms, face));
 
             std::stringstream ss;
-            int count = 0;
             for (auto hd : sm.halfedges_around_face(sm.halfedge(face))) {
-//                count++;
-//                if (count > 3) {
-//                    int x = 1;
-//                }
-//                if (hd.idx() == 112807) {
-//                    int num = sm.number_of_faces();
-//                    int numrem = sm.number_of_removed_faces();
-////                    std::cout << "Edge Error - " << VDtoVIdx.at(sm.source(hd)) << ", " << VDtoVIdx.at(sm.target(hd)) << "\n";
-//                }
-//
-//                if (VDtoVIdx.find(sm.source(hd)) == VDtoVIdx.end()) {
-//                    int t = sm.is_removed(hd);
-//                    int h = sm.is_removed(sm.source(hd));
-//                    int e = sm.is_removed(sm.edge(hd));
-//                    int f = sm.is_removed(sm.face(hd));
-//                    int x = 1;
-//                } else {
-                    auto s = sm.source(hd);
-                    ss << " " << VDtoVIdx.at(sm.source(hd)) + 1 << "//" << nrmIdx + 1;
-//                }
+                auto s = sm.source(hd);
+                ss << " " << VDtoVIdx.at(sm.source(hd)) + 1 << "//" << nrmIdx + 1;
             }
 
             f.push_back(ss.str());
@@ -204,7 +186,6 @@ namespace IO {
                 "v " << pos.x() << " " << pos.y() << " " << pos.z() << "\n";
         }
 
-//    out << "vn 0.0 0.0 0.0\n";
         for (auto nrm : vn) {
             out << "vn " << nrm.x() << " " << nrm.y() << " " << nrm.z() << "\n";
         }
@@ -292,6 +273,39 @@ namespace IO {
         CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
 
         return surfaceMesh;
+    }
+
+    void AddSeamsFromFile(const SurfaceMeshPtr& mesh, const std::string& filename) {
+        auto [eSeamMap, hasESeamMap] = mesh->property_map<SM_edge_descriptor, bool>("e:on_seam");
+        auto [vSeamMap, hasVSeamMap] = mesh->property_map<SM_vertex_descriptor, bool>("v:on_seam");
+        if (!hasESeamMap) {
+            eSeamMap = mesh->add_property_map<SM_edge_descriptor, bool>("e:on_seam", false).first;
+        }
+        if (!hasVSeamMap) {
+            vSeamMap = mesh->add_property_map<SM_vertex_descriptor, bool>("v:on_seam", false).first;
+        }
+
+        std::ifstream infile(filename);
+        std::string line;
+        std::getline(infile, line);
+        char *cStr = line.data();
+
+        int a, b;
+        bool vertexAIndex = true;
+        char* token = std::strtok(cStr, " ");
+        while (token) {
+            if (vertexAIndex) {
+                a = std::stoi(token);
+                put(vSeamMap, SM_vertex_descriptor(a), true);
+                vertexAIndex = false;
+            } else {
+                b = std::stoi(token);
+                put(vSeamMap, SM_vertex_descriptor(b), true);
+                put(eSeamMap, mesh->edge(mesh->halfedge(SM_vertex_descriptor(a), SM_vertex_descriptor(b))), true);
+                vertexAIndex = true;
+            }
+            token = std::strtok(nullptr, " ");
+        }
     }
 
     SurfaceMeshPtr LoadMesh(const std::string& filename) {
@@ -403,29 +417,20 @@ namespace IO {
         for (const auto& pixel : tex) {
             auto r = pixel.r, g = pixel.g, b = pixel.b;
 
-//            auto r2 = floor(255.0f * (r / maxOffset));
-//            auto g2 = floor(255.0f * (g / maxOffset));
-//            auto b2 = floor(255.0f * (b / maxOffset));
-//
-//            if (r2 > 72.0f || g2 > 72.0f || b2 > 72.0f ) {
-//                int x = 1;
+//            if (max == 0 && (r != 0.0f && g != 0.0f && b != 0.0f)) {
+//                out << (unsigned char)200;
+//                out << (unsigned char)50;
+//                out << (unsigned char)0;
 //            }
-
-            out << (unsigned char)floor(r);
-            out << (unsigned char)floor(g);
-            out << (unsigned char)floor(b);
-
-//            if (max < 256) {
-//                //Only one byte stored.
-//                out << (unsigned char)floor(pixel.r);
-//                out << (unsigned char)floor(pixel.g);
-//                out << (unsigned char)floor(pixel.b);
+//            else if (max == 0 && (r == 0.0f || g == 0.0f || b != 0.0f)) {
+//                out << (unsigned char)0;
+//                out << (unsigned char)200;
+//                out << (unsigned char)0;
 //            }
-//            else {
-//                //Two bytes stored
-//                out << (uint16_t) floor(pixel.r);
-//                out << (uint16_t) floor(pixel.g);
-//                out << (uint16_t) floor(pixel.b);
+//            if {
+                out << (unsigned char)floor(r);
+                out << (unsigned char)floor(g);
+                out << (unsigned char)floor(b);
 //            }
         }
         out.flush();

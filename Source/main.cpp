@@ -20,6 +20,12 @@
 #include "Debug.h"
 #include "Mapping.h"
 #include <tclap/CmdLine.h>
+#include <igl/IO>
+#include <igl/gaussian_curvature.h>
+#include <igl/massmatrix.h>
+#include <igl/invert_diag.h>
+#include <Evaluation.h>
+#include <glm/gtx/string_cast.hpp>
 
 
 ////// MAPPING
@@ -37,8 +43,8 @@
 #define DRAW_MV false
 #define DRAW_PV false
 
-const int WIDTH = 800;
-const int HEIGHT = 600;
+const int WIDTH = 1260;
+const int HEIGHT = 720;
 unsigned int pass_count = 0;
 
 double deltaTime = 0.0f;	// Time between current frame and last frame
@@ -51,6 +57,8 @@ bool firstMouse = true;
 struct ViewSettings {
     bool showLines = false;
     float displacementThreshold = 5.0f;
+    bool useTestTex = false;
+    bool testView = false;
 };
 
 ViewSettings viewSettings;
@@ -66,37 +74,10 @@ static void GLFWErrorCallback(int error, const char* description) {
 constexpr unsigned int NUM_TESS_LEVELS = 1;
 typedef std::array<TessLevel, NUM_TESS_LEVELS> TessLevels;
 TessLevels tessLevels {{
-//                               {1, 1, 1, 1}, // No tessellation
-                               {5, 5, 5, 5},
-//                               {10, 10, 10, 10}
+                               {2, 2, 2, 3},
+//                               {3, 3, 3, 3},
+//                               {3, 3, 3, 4},
                        }};
-
-//void testMapping(const std::string& data_path, const std::string& out_path, const std::string& name) {
-//    using namespace SurfaceMaps;
-//    fs::path dpath = data_path;
-//    fs::path opath = out_path;
-//    fs::path output_dir = opath / "approximation";
-//    const fs::path mesh_path_A = dpath / name / "-simple.obj";
-//    const fs::path mesh_path_B = dpath / name / ".obj";
-//    const fs::path landmarks_path_A = dpath / name / "-simple.pinned";
-//    const fs::path landmarks_path_B = dpath / name / ".pinned";
-//    const fs::path embedding_path_A = output_dir / "embedding_A.obj";
-//    const fs::path embedding_path_B = output_dir / "embedding_B.obj";
-//
-//    // Init map
-//    MapState map_state;
-//    init_map(map_state, { mesh_path_A, mesh_path_B }, { landmarks_path_A, landmarks_path_B }, { embedding_path_A, embedding_path_B }, false);
-//
-//    // Optimize map
-//    landmark_phase(map_state);
-//    release_landmarks(map_state);
-//    coarse_phase(map_state);
-//    fine_phase(map_state);
-//
-////    AdaptiveTriangulationsSettings fine_settings = fine_phase_settings();
-////    fine_settings.w_approx = w_approx;
-////    optimize_with_remeshing(map_state, fine_settings, "");
-//}
 
 void testDecimate(const SurfaceMeshPtr& mesh, double ratio) {
     auto edgeCostMap = mesh->property_map<SM_edge_descriptor, double>("e:collapse_cost").first;
@@ -121,18 +102,17 @@ int main(int argc, char** argv)
     bool EXPORT_PROCESSED_FACES = true;
     bool IMPORT_PROCESSED_FACES = false;
     bool EXPORT_TEXTURE = true;
+    bool EXPORT_TESSELLATED_MAPPING = true;
 
     fs::path dataDir;
     try {
         TCLAP::CmdLine cmd("Program Description", ' ', "0.1");
         TCLAP::ValueArg<std::string> dataDirArg("d", "data-dir", "Directory for model data", true, "./data", "string");
+        cmd.add(dataDirArg);
+
         TCLAP::SwitchArg exportTessMeshSwitch("m", "export-mesh", "Export tessellated mesh", cmd, true);
         TCLAP::SwitchArg exportProcessedFacesSwitch("p", "export-faces", "Export processed faces", cmd, false);
         TCLAP::SwitchArg exportTextureSwitch("t", "export-texture", "Export texture", cmd, true);
-        cmd.add(dataDirArg);
-        cmd.add(exportTessMeshSwitch);
-        cmd.add(exportProcessedFacesSwitch);
-        cmd.add(exportTextureSwitch);
 
         cmd.parse(argc, argv);
 
@@ -153,15 +133,16 @@ int main(int argc, char** argv)
     const std::string modelName = "beast";
     const std::string modelBase = modelsPath + modelName + "/";
     const std::string outSimplifiedBase = outPath + modelName + "-simplifiedtest-" + percentStr;
-    const std::string inSimplifiedBase = modelBase + "simple"/* + percentStr*/;
-//    const std::string selectionsFilename = !PRE_SIMPLIFIED ? CGAL::data_file_path(modelBase + ".selection.txt") : "";
+//    const std::string inSimplifiedBase = modelBase + "simple"/* + percentStr*/;
+    const std::string selectionsFilename = !PRE_SIMPLIFIED ? CGAL::data_file_path(modelBase + "edge.selection.txt") : "";
 //    const std::string simplifiedSelectionsFilename = CGAL::data_file_path(inSimplifiedBase + ".selection.txt");
 
 //    const std::string outSimplifiedFilename = CGAL::data_file_path(outSimplifiedBase + ".obj");
 
-    std::string mapFilename = dataDir / "MapBtoA.txt";
+    std::string mapFilename = dataDir / "MapOrigtoSimple.txt";
     std::string inSimplifiedFilename = dataDir / "simple.obj";
     std::string inOriginalFilename = dataDir / "original.obj";
+    std::string inEdgeSelectionsFilename = dataDir / "edge.selection.txt";
 
 
 
@@ -198,8 +179,12 @@ int main(int argc, char** argv)
 //        std::tie(highResMesh, highResSeamMesh) = IO::fromOBJ(filename, selectionsFilename);
 //    }
 
-    sm = IO::fromOBJ(inSimplifiedFilename, true, true);
+    sm = IO::fromOBJ(inSimplifiedFilename, true, false);
+    IO::AddSeamsFromFile(sm, inEdgeSelectionsFilename);
     highResMesh = IO::fromOBJ(inOriginalFilename);
+    Eigen::MatrixXi F;
+    Eigen::MatrixXd V;
+    igl::readOBJ(inOriginalFilename, V, F);
 
     FaceToVertsMap faceVertsMap = loadMap(mapFilename, *highResMesh, *sm);
 
@@ -243,7 +228,20 @@ int main(int argc, char** argv)
 
     if (!IMPORT_PROCESSED_FACES)
     {
-        gaussMap = Utils::CalculateGaussianCurvature(*highResMesh);
+        Eigen::VectorXd K;
+        igl::gaussian_curvature(V,F,K);
+        Eigen::SparseMatrix<double> M,Minv;
+        igl::massmatrix(V,F,igl::MASSMATRIX_TYPE_DEFAULT,M);
+        igl::invert_diag(M,Minv);
+        // Divide by area to get integral average
+        K = (Minv*K).eval();
+
+        auto gaussMap = highResMesh->add_property_map<SM_vertex_descriptor, double>("v:curvature").first;
+        for (unsigned int i = 0; i < highResMesh->num_vertices(); i++) {
+            put(gaussMap, SM_vertex_descriptor(i), K(i,0));
+        }
+
+//        gaussMap = Utils::CalculateGaussianCurvature(*highResMesh);
 
         uvmap = sm->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
         highResUVMap = highResMesh->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
@@ -320,6 +318,7 @@ int main(int argc, char** argv)
             auto fColor = sm_copy->add_property_map<SM_face_descriptor, CGAL::IO::Color>("f:color",
                                                                                          CGAL::IO::Color(0x44, 0x44,
                                                                                                          0x44)).first;
+            auto fNormsCopy = sm_copy->property_map<SM_face_descriptor, Vector>("f:normal").first;
             int faceCount = 1;
             for (SM_face_descriptor fd: sm->faces()) {
                 auto processFace = std::make_shared<ProcessFace>();
@@ -335,7 +334,7 @@ int main(int argc, char** argv)
 
                 currTessLevel.processedFaces.insert({fd, processFace});
 
-                if (faceCount == 1035) {
+                if (processFace->fd.idx() == 988) {
                     int x = 1;
                 }
 
@@ -345,8 +344,9 @@ int main(int argc, char** argv)
                 Strategy::tessellateFace(processFace, *sm_copy, tessLevels.at(i), currTessLevel.processedEdges, stats);
                 Strategy::projectEdgeVerts(processFace, *sm_copy, aabbTree, currTessLevel.interpolateVerts,
                                            currTessLevel.processedEdges, stats);
+
                 Strategy::minBiGraphMatch(processFace, featureVerts, stats);
-                Strategy::moveAndValidate(processFace, *sm_copy, *highResMesh, gaussMap, stats); // Not validating flipped faces well?
+                Strategy::moveAndValidate(processFace, *sm_copy, *highResMesh, gaussMap, stats); // Not validating flipped faces well? Maybe fixed
                 Strategy::projectAndValidate(processFace, *sm_copy, *highResMesh, aabbTree, currTessLevel.interpolateVerts,
                                              stats);
 
@@ -403,6 +403,7 @@ int main(int argc, char** argv)
 
             Strategy::calculateUVs(*sm_copy, *sm, currTessLevel.processedFaces);
 
+            
             auto tLevel = tessLevels.at(i);
             std::stringstream tessLevelStr;
             tessLevelStr << i << "-" << tLevel.ol0 << "-" << tLevel.ol1 << "-" << tLevel.ol2 << "-" << tLevel.il;
@@ -410,7 +411,7 @@ int main(int argc, char** argv)
             if (EXPORT_TESSELLATED_MESH) {
                 std::string name = tessLevelStr.str() + ".obj";
                 std::ofstream finalOut(dataDir / "out" / name);
-                IO::toOBJ(*sm_copy, finalOut, "", "", "");
+                IO::toOBJ(*sm_copy, finalOut, "", "", dataDir / "out" / "edge.selection.txt");
             }
 
             if (EXPORT_PROCESSED_FACES) {
@@ -419,6 +420,38 @@ int main(int argc, char** argv)
 
                 cereal::BinaryOutputArchive oarchive(processedFacesOut);
                 oarchive(currTessLevel.processedFaces);
+            }
+
+            if (EXPORT_TESSELLATED_MAPPING) {
+                std::string name = tessLevelStr.str() + "-mapping.txt";
+                std::string blenderSelections = tessLevelStr.str() + "-selection.txt";
+                std::ofstream finalOut(dataDir / "out" / name);
+                std::ofstream blenderOut(dataDir / "out" / blenderSelections);
+
+                blenderOut << "[";
+                bool first = true;
+                for (const auto& [fd, face] : currTessLevel.processedFaces) {
+                    for (const auto& tessVert : face->tessVerts) {
+                        if (tessVert->matchingFeature != nullptr) {
+                            auto feature = tessVert->matchingFeature;
+                            auto targetVD =  highResMesh->source(feature->hd);
+                            finalOut << tessVert->vd << " " << targetVD.idx() << "\n";
+
+                            if (first) {
+                                first = false;
+                                blenderOut << tessVert->vd.idx();
+                            }
+                            else {
+                                blenderOut << "," << tessVert->vd.idx();
+                            };
+                        }
+                    }
+                }
+                blenderOut << "]";
+                blenderOut.flush();
+                blenderOut.close();
+                finalOut.flush();
+                finalOut.close();
             }
 
             bars[0].tick();
@@ -466,22 +499,61 @@ int main(int argc, char** argv)
         std::cout << Utils::SectionString(key) << ": " << val << "\n";
     }
 
+    //Run evaluation
+//    std::vector<SurfaceMeshPtr> evalMeshes;
+//    for (auto tessMesh : allTessMeshes) {
+//        evalMeshes.push_back(tessMesh.mesh);
+//    }
+//    auto errors = Evaluation::error(highResMesh, evalMeshes);
+
     Prepare::OGLData modelData = Prepare::toOGL(*sm);
-    auto oglMesh = new OGLMesh(modelData);
+    auto oglMesh = std::make_shared<OGLMesh>(modelData);
 
     Prepare::OGLData tessModelData = Prepare::toOGL(*allTessMeshes.at(0).mesh);
-    auto tessOglMesh = new OGLMesh(tessModelData);
+    auto testTessOglMesh = std::make_shared<OGLMesh>(tessModelData);
+
+    struct TessTexture {
+        int width, height;
+        std::vector<glm::vec3> displacement, normal;
+        unsigned int displacementID, normalID;
+        unsigned int displaceTexUnit, normalTexUnit;
+    };
+
+    typedef std::shared_ptr<OGLMesh> OGLMeshPtr;
+    typedef std::shared_ptr<TessTexture> TessTexturePtr;
+    struct TessOglMesh {
+        OGLMeshPtr oglMesh;
+        TessTexturePtr tex;
+        TessLevel tessLevel;
+    };
+
+    std::vector<TessOglMesh> tessOglMeshes;
+
+    // Create No tessellation model
+    auto simpleTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
+    Prepare::createTextures(sm, {sm}, simpleTex->width, simpleTex->height, simpleTex->displacement, simpleTex->normal);
+    TessOglMesh simplifiedOglMesh {oglMesh, simpleTex, {1, 1, 1, 1}};
+    tessOglMeshes.push_back(simplifiedOglMesh);
+
+    int tessLevelIndex = 0;
+    for (auto& tessMesh : allTessMeshes) {
+        auto tessTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
+        Prepare::createTextures(sm, tessMesh, tessTex->width, tessTex->height, tessTex->displacement, tessTex->normal);
+        TessOglMesh tessOglMesh {oglMesh, tessTex, tessLevels.at(tessLevelIndex)};
+        tessOglMeshes.push_back(tessOglMesh);
+        if (EXPORT_TEXTURE) {
+            auto texstr = std::to_string(tessLevelIndex) + "_tex.ppm";
+            auto nrmstr = std::to_string(tessLevelIndex) + "_nrm.ppm";
+            IO::WriteTexture(tessTex->displacement, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / texstr);
+            IO::WriteTexture(tessTex->normal, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / nrmstr);
+        }
+
+        tessLevelIndex++;
+    }
 
     Prepare::OGLData highResModelData = Prepare::toOGL(*highResMesh);
     auto highResOglMesh = new OGLMesh(highResModelData);
 
-    //Texture Setup
-    int width=8192, height=8192, maxVal;
-    float offset;
-    auto tex = Prepare::createTexture(*sm, allTessMeshes.at(0), width, height, offset, maxVal);
-    if (EXPORT_TEXTURE) {
-        IO::WriteTexture(tex, width, height, offset, maxVal, dataDir / "out" / "tex.ppm");
-    }
 
     glfwInit();
     glfwSetErrorCallback(GLFWErrorCallback);
@@ -512,29 +584,52 @@ int main(int argc, char** argv)
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
+    testTessOglMesh->setupMesh();
     oglMesh->setupMesh();
-    tessOglMesh->setupMesh();
     highResOglMesh->setupMesh();
-//    int width, height, nrChannels;
-//    unsigned char *tex = stbi_load("../Models/testTexture.png", &width, &height, &nrChannels, 0);
-//    if (!tex) {
-//        std::cout << "Failed to load texture" << std::endl;
-//    }
 
-//    return EXIT_SUCCESS;
-    unsigned int texture;
+    int width, height, nrChannels;
+    const std::string nrmPath = dataDir / "checkersmall.png";
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char *tex = stbi_load(nrmPath.c_str(), &width, &height, &nrChannels, 0);
+    if (!tex) {
+        std::cout << "Failed to load texture" << std::endl;
+    }
 
-    glGenTextures(1, &texture);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    unsigned int testTextureID;
+
+    glGenTextures(1, &testTextureID);
+    glBindTexture(GL_TEXTURE_2D, testTextureID);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-//    glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
-//    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
-//    stbi_image_free(tex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, tex.data());
+    glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
+    stbi_image_free(tex);
+
+    int glTexIndex = 1;
+    for (const auto& tessOglMesh : tessOglMeshes) {
+
+        auto tessTex = tessOglMesh.tex;
+        tessTex->displaceTexUnit = GL_TEXTURE0 + glTexIndex++;
+        glGenTextures(1, &tessTex->displacementID);
+        glBindTexture(GL_TEXTURE_2D, tessTex->displacementID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, tessTex->width, tessTex->height, 0, GL_RGB, GL_FLOAT, tessTex->displacement.data());
+
+        tessTex->normalTexUnit = GL_TEXTURE0 + glTexIndex++;
+        glGenTextures(1, &tessTex->normalID);
+        glBindTexture(GL_TEXTURE_2D, tessTex->normalID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, tessTex->width, tessTex->height, 0, GL_RGB, GL_FLOAT, tessTex->normal.data());
+    }
 
     // Load Shader
     auto tess_shader = Shader(
@@ -555,7 +650,7 @@ int main(int argc, char** argv)
 
 
     glm::mat4 projection;
-    projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 10000.0f);
+    projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100000.0f);
 
     // Render Loop
     while(!glfwWindowShouldClose(window))
@@ -578,29 +673,70 @@ int main(int argc, char** argv)
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
 
-
+        glm::mat4 tempView = {
+                {-0.463278, 0.187274, -0.866200, 0.000000},
+                {0.000000, 0.977417, 0.211319, 0.000000},
+                {0.886213, 0.097899, -0.452816, 0.000000},
+                {20.044111, -153.227295, -64.848488, 1.000000}
+        };
         tess_shader.use();
-        tess_shader.setMat4("model", model);
-        tess_shader.setMat4("view", camera.GetViewMatrix());
+        if (viewSettings.testView) {
+            tess_shader.setMat4("view", tempView);
+        } else {
+            tess_shader.setMat4("view", camera.GetViewMatrix());
+        }
         tess_shader.setMat4("projection", projection);
-        tess_shader.setInt("vProjectionMap", 0);
-        tess_shader.setInt("texWidth", width);
-        tess_shader.setInt("texHeight", height);
-        tess_shader.setVec3("lightPos", glm::vec3(0.0, 0.0, 1000.0));
+        tess_shader.setVec3("lightPos", glm::vec3(0.0, 200.0, 1000.0));
         tess_shader.setVec3("viewPos", camera.Position);
-        tess_shader.setVec4("tessellationLevel", 5, 5, 5, 5);
+        tess_shader.setBool("useTestTex", viewSettings.useTestTex);
+        tess_shader.setInt("testTextureMap", 0);
+        tess_shader.setInt("numTessLevels", 2);
+        if (viewSettings.useTestTex) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, testTextureID);
+        }
 
-        glBindTexture(GL_TEXTURE_2D, texture);
-//        glBindVertexArray(VAO);
-//        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, nullptr);
+        auto firstMesh = tessOglMeshes.at(0), secondMesh = tessOglMeshes.at(1);
+        int projectionMaps[2] = {static_cast<int>(firstMesh.tex->displacementID), static_cast<int>(secondMesh.tex->displacementID)};
+        int normalMaps[2] = {static_cast<int>(firstMesh.tex->normalID), static_cast<int>(secondMesh.tex->normalID)};
+        int texWidths[2] = {firstMesh.tex->width, secondMesh.tex->width};
+        int texHeights[2] = {firstMesh.tex->height, secondMesh.tex->height};
+
+        tess_shader.setIntArr("vProjectionMaps", projectionMaps, 2);
+        tess_shader.setIntArr("vNormalMaps", normalMaps, 2);
+        tess_shader.setIntArr("texWidths", texWidths, 2);
+        tess_shader.setIntArr("texHeights", texHeights, 2);
+        tess_shader.setMat4("model", model);
+
+        glm::ivec4 shaderTessLevels[2] = {
+                firstMesh.tessLevel.toGLM(),
+                secondMesh.tessLevel.toGLM(),
+        };
+        tess_shader.setVec4Arr("tessellationLevels", shaderTessLevels, 2);
+
+        float distances[2] = {150.0, 0.0};
+        tess_shader.setFloatArr("tessellationLevelDistances", distances, 2);
+//        tess_shader.setFloat("tessellationLevelDistance0", 50.0f);
+//        tess_shader.setFloat("tessellationLevelDistance1", 2.0f);
+        float xPos = -300.f;
+        for (const auto& tessOglMesh : tessOglMeshes) {
+            auto tessTex = tessOglMesh.tex;
+            glActiveTexture(tessTex->displaceTexUnit);
+            glBindTexture(GL_TEXTURE_2D, tessTex->displacementID);
+            glActiveTexture(tessTex->normalTexUnit);
+            glBindTexture(GL_TEXTURE_2D, tessTex->normalID);
+        }
+
         oglMesh->draw(tess_shader, OGLMesh::Patches);
 
         plain_shader.use();
-        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{150.0f, 0.f, 0.f}));
+        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{200.0f, 0.f, 0.f}));
         plain_shader.setMat4("view", camera.GetViewMatrix());
         plain_shader.setMat4("projection", projection);
         plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
         plain_shader.setVec3("viewPos", camera.Position);
+        plain_shader.setBool("useTestTex", viewSettings.useTestTex);
+        plain_shader.setInt("testTextureMap", 0);
         if (viewSettings.showLines) {
             plain_shader.setBool("inWireframe", true);
         }
@@ -608,19 +744,13 @@ int main(int argc, char** argv)
             plain_shader.setBool("inWireframe", false);
         }
 
-        tessOglMesh->draw(plain_shader, OGLMesh::Triangles);
+        testTessOglMesh->draw(plain_shader, OGLMesh::Triangles);
 
-//        oglMesh->draw(plain_shader, OGLMesh::Triangles);
-
-        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{-150.0f, 0.f, 0.f}));
-        plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
+        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{-200.0f, 0.f, 0.f}));
         highResOglMesh->draw(plain_shader, OGLMesh::Triangles);
-        //dragon_model->Draw(tess_shader);
-        //bunny_model->Draw(tess_shader);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
-
     }
 
     glfwTerminate();
@@ -630,6 +760,8 @@ int main(int argc, char** argv)
 auto m_key_state = GLFW_RELEASE;
 std::unordered_map<int, int> key_states = {
         {GLFW_KEY_M, GLFW_RELEASE},
+        {GLFW_KEY_T, GLFW_RELEASE},
+        {GLFW_KEY_C, GLFW_RELEASE},
         {GLFW_KEY_LEFT_BRACKET, GLFW_RELEASE},
         {GLFW_KEY_RIGHT_BRACKET, GLFW_RELEASE},
 };
@@ -652,6 +784,21 @@ void processInput(GLFWwindow *window)
     else if (glfwGetKey(window, GLFW_KEY_M) == GLFW_RELEASE && key_states.at(GLFW_KEY_M) == GLFW_PRESS) {
         viewSettings.showLines = !viewSettings.showLines;
         key_states.at(GLFW_KEY_M) = GLFW_RELEASE;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS)
+        key_states.at(GLFW_KEY_T) = GLFW_PRESS;
+    else if (glfwGetKey(window, GLFW_KEY_T) == GLFW_RELEASE && key_states.at(GLFW_KEY_T) == GLFW_PRESS) {
+        viewSettings.useTestTex = !viewSettings.useTestTex;
+        key_states.at(GLFW_KEY_T) = GLFW_RELEASE;
+    }
+
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS)
+        key_states.at(GLFW_KEY_C) = GLFW_PRESS;
+    else if (glfwGetKey(window, GLFW_KEY_C) == GLFW_RELEASE && key_states.at(GLFW_KEY_C) == GLFW_PRESS) {
+        std::cout << glm::to_string(camera.GetViewMatrix()) << std::endl;
+        viewSettings.testView = !viewSettings.testView;
+        key_states.at(GLFW_KEY_C) = GLFW_RELEASE;
     }
 
     if (glfwGetKey(window, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS)

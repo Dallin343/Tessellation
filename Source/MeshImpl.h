@@ -487,6 +487,14 @@ struct TessLevel {
     unsigned int ol1;
     unsigned int ol2;
     unsigned int il;
+
+    glm::ivec4 toGLM() const {
+        return {ol0, ol1, ol2, il};
+    }
+
+    bool isIdentity() const {
+        return ol0 == 1 && ol1 == 1 && ol2 == 1 && il == 1;
+    };
 };
 
 namespace glm {

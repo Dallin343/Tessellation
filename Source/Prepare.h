@@ -34,7 +34,8 @@ namespace Prepare {
 
     OGLData toOGL(const SurfaceMesh& sm);
 
-    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, const TessLevelData& data, int w, int h, float& offset, int& max);
+    void createTextures(const SurfaceMeshPtr& sm, const TessLevelData& data, int& w, int& h,
+                        std::vector<glm::vec3>& displaceTex, std::vector<glm::vec3>& normalTex);
 //    void processEdge(const ProcessEdgePtr& edge, const );
     ProcessEdgePtr findEdge(const ProcessFacePtr& face, const TessVertPtr& tessVert);
     glm::vec2 findMinDiff(TexCoordVals& texCoordVals);

@@ -36,10 +36,10 @@ namespace Prepare {
                         glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
                         glm::vec2 texCoords = Utils::toGLM(uv);
 
-                        glm::vec3 color = {};
-                        if (hasColor) {
-                            color = get(vColorMap, vd);
-                        }
+                        glm::vec3 color = {0.4f, 0.4f, 0.4f};
+//                        if (hasColor) {
+//                            color = get(vColorMap, vd);
+//                        }
                         data.vertices.emplace_back(pos, nrm, color, texCoords);
                     }
                 }
@@ -70,10 +70,10 @@ namespace Prepare {
                             Point_2 uv = get(uvMap, hd);
                             texCoords = Utils::toGLM(uv);
                         }
-                        glm::vec3 color = {};
-                        if (hasColor) {
-                            color = get(vColorMap, vd);
-                        }
+                        glm::vec3 color = {0.4f, 0.4f, 0.4f};
+//                        if (hasColor) {
+//                            color = get(vColorMap, vd);
+//                        }
                         data.vertices.emplace_back(pos, nrm, color, texCoords);
                     }
                     hdToVertIdx.insert({hd, idx});
@@ -171,44 +171,76 @@ namespace Prepare {
         return {offsetVal, maxVal + offsetVal};
     }
 
-    std::vector<glm::vec3> createTexture(const SurfaceMesh& sm, const TessLevelData& data, int w, int h, float& offset, int& max) {
+    void createTextures(const SurfaceMeshPtr& sm, const TessLevelData& data, int& w, int& h,
+                        std::vector<glm::vec3>& displaceTex, std::vector<glm::vec3>& normalTex) {
         auto tess_mesh = data.mesh;
 
-        typedef std::vector<std::pair<glm::vec2, glm::vec3>> UV_Displace_Vec;
-        UV_Displace_Vec texCoordVals;
-        std::unordered_map<SM_vertex_descriptor, UV_Displace_Vec> texCoordValsMap{};
+        typedef std::vector<std::tuple<glm::vec2, glm::vec3, glm::vec3>> UV_Tex_Vals;
+        UV_Tex_Vals texCoordVals;
+        std::unordered_map<SM_vertex_descriptor, UV_Tex_Vals> texCoordValsMap{};
         EdgeSet processedEdges;
         auto eSeamMap = tess_mesh->property_map<SM_edge_descriptor, bool>("e:on_seam").first;
-//        auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
         auto vSeamMap = tess_mesh->property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
         auto uvmap = tess_mesh->property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        auto vNorms = tess_mesh->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         std::unordered_set<SM_vertex_descriptor> processedVerts;
 
         unsigned numTexCoords = 0;
 
-        for (const auto& [fd, face] : data.processedFaces) {
-            for (const auto& tessVert : face->tessVerts) {
-                if (processedVerts.find(tessVert->vd) != processedVerts.end()) {
-                    continue;
-                }
+        if (tess_mesh == sm) {
+            for (const auto& vertex : tess_mesh->vertices()) {
+                texCoordValsMap.insert({vertex, {}});
+                auto& texCoordVec = texCoordValsMap.at(vertex);
 
-                if (texCoordValsMap.find(tessVert->vd) == texCoordValsMap.end()) {
-                    texCoordValsMap.insert({tessVert->vd, {}});
-                }
-                auto& texCoordVec = texCoordValsMap.at(tessVert->vd);
-                for (const auto& hd : halfedges_around_source(tessVert->vd, *data.mesh)) {
-                    auto uv = get(uvmap, hd);
-                    auto it = std::find_if(texCoordVec.begin(), texCoordVec.end(), [&](const auto& pair) {
-                        return glm::all(glm::lessThanEqual(glm::abs(Utils::toGLM(uv) - pair.first), {0.00001, 0.00001}));
-                    });
+                if (get(vSeamMap, vertex)) {
+                    for (const auto& hd: halfedges_around_source(vertex, *tess_mesh)) {
+                        auto uv = get(uvmap, hd);
+                        auto it = std::find_if(texCoordVec.begin(), texCoordVec.end(), [&](const auto &tup) {
+                            return glm::all(glm::lessThanEqual(glm::abs(Utils::toGLM(uv) - std::get<0>(tup)),
+                                                               {0.00001, 0.00001}));
+                        });
 
-                    if (it == std::end(texCoordVec)) {
-                        uv = get(uvmap, hd);
-                        auto displace = tessVert->newCoords - tessVert->origCoords;
-                        texCoordVec.emplace_back(Utils::toGLM(uv), displace);
-                        numTexCoords++;
+                        if (it == std::end(texCoordVec)) {
+                            auto nrm = Utils::toGLM(get(vNorms, vertex));
+                            texCoordVec.emplace_back(Utils::toGLM(uv), glm::vec3(0.0f, 0.0f, 1.0f),
+                                                     glm::normalize(nrm));
+                            numTexCoords++;
+                        }
                     }
-                    processedVerts.insert(tessVert->vd);
+                } else {
+                    auto nrm = Utils::toGLM(get(vNorms, vertex));
+                    auto uv = get(uvmap, tess_mesh->opposite(tess_mesh->halfedge(vertex)));
+                    texCoordVec.emplace_back(Utils::toGLM(uv), glm::vec3(0.0f, 0.0f, 1.0f), nrm);
+                    numTexCoords++;
+                }
+            }
+        }
+        else {
+            for (const auto& [fd, face] : data.processedFaces) {
+                for (const auto& tessVert : face->tessVerts) {
+                    if (processedVerts.find(tessVert->vd) != processedVerts.end()) {
+                        continue;
+                    }
+
+                    if (texCoordValsMap.find(tessVert->vd) == texCoordValsMap.end()) {
+                        texCoordValsMap.insert({tessVert->vd, {}});
+                    }
+                    auto& texCoordVec = texCoordValsMap.at(tessVert->vd);
+                    for (const auto& hd : halfedges_around_source(tessVert->vd, *data.mesh)) {
+                        auto uv = get(uvmap, hd);
+                        auto it = std::find_if(texCoordVec.begin(), texCoordVec.end(), [&](const auto& tup) {
+                            return glm::all(glm::lessThanEqual(glm::abs(Utils::toGLM(uv) - std::get<0>(tup)), {0.00001, 0.00001}));
+                        });
+
+                        if (it == std::end(texCoordVec)) {
+                            uv = get(uvmap, hd);
+                            auto nrm = Utils::toGLM(get(vNorms, tess_mesh->source(hd)));
+                            auto displace = tessVert->newCoords - tessVert->origCoords;
+                            texCoordVec.emplace_back(Utils::toGLM(uv), displace, glm::normalize(nrm));
+                            numTexCoords++;
+                        }
+                        processedVerts.insert(tessVert->vd);
+                    }
                 }
             }
         }
@@ -217,93 +249,107 @@ namespace Prepare {
         for (const auto& [vd, vec] : texCoordValsMap) {
             texCoordVals.insert(texCoordVals.end(), vec.begin(), vec.end());
         }
-//
-//        for (const auto& hd : tess_mesh->halfedges()) {
-//            auto fd = tess_mesh->face(hd);
-//            auto vd = tess_mesh->source(hd);
-//            ProcessFacePtr face = data.processedFaces.at(fd);
-//            auto& tessVert = face->vdToTessVert.at(vd);
-//            auto displace = tessVert->newCoords - tessVert->origCoords;
-//            auto uv = get(uvmap, hd);
-//
-//            if (get(eSeamMap, sm.edge(hd)) || processedVerts.find(vd) == processedVerts.end()) {
-//                texCoordVals.emplace_back(Utils::toGLM(uv), displace);
-//            }
-//            processedVerts.insert(vd);
-//        }
-        int s = texCoordVals.size();
-        int a = processedVerts.size();
-        int n = tess_mesh->number_of_vertices();
 
-//        for (const auto& fd: sm.faces()) {
-//            ProcessFacePtr face = data.processedFaces.at(fd);
-//            auto [uv0, uv1, uv2] = face->uvs;
-//
-//            //Create texCoords for inner vertices
-//            for (auto& innerVert : face->innerVerts) {
-//                auto bary = innerVert->baryCoords;
-//                auto uv = Utils::toGLM(uv0) * bary.x + Utils::toGLM(uv1) * bary.y + Utils::toGLM(uv2) * bary.z;
-//                auto displace = innerVert->newCoords - innerVert->origCoords;
-//                if (glm::length(displace) > 60.0f) {
-//                    testing.emplace_back(innerVert, displace);
-//                }
-//                texCoordVals.emplace_back(uv, displace);
-//            }
-//
-//            //Create texCoords for edge vertices, checking if they are on a seam.
-//            processEdge(face->e01, face, eSeamMap, processedEdges, texCoordVals);
-//            processEdge(face->e12, face, eSeamMap, processedEdges, texCoordVals);
-//            processEdge(face->e02, face, eSeamMap, processedEdges, texCoordVals);
-//        }
+        int overlapCount;
+        std::unordered_set<int> overlaps;
+        float maxPercentOverlap = 0.01;
+        int resolution = 64;
 
-        //Find the minimum difference between values
-        //glm::vec2 minDiff = findMinDiff(texCoordVals);
-        std::vector<glm::vec3> tex;
-        tex.reserve(w * h);
-        for (int i = 0; i < w * h; i++) {
-            tex.emplace_back(0.0f, 0.0f, 0.0f);
+        std::unordered_map<int, std::unordered_set<int>> usedPixels = {};
+        std::vector<std::pair<int, int>> usedIndices = {};
+
+        for (; resolution <= 4192; resolution *= 2) {
+            std::cout << "Generating Texture with resolution: " << resolution << "\n";
+            overlapCount = 0;
+            overlaps.clear();
+            usedPixels.clear();
+            usedIndices.clear();
+
+            displaceTex.clear();
+            displaceTex.reserve(resolution * resolution);
+            normalTex.clear();
+            normalTex.reserve(resolution * resolution);
+            for (int i = 0; i < resolution * resolution; i++) {
+                displaceTex.emplace_back(0.0f, 0.0f, 0.0f);
+                normalTex.emplace_back(0.0f, 0.0f, 0.0f);
+            }
+
+            bool increaseResolution = false;
+            for (auto &tup: texCoordVals) {
+                glm::vec2 uv = std::get<0>(tup);
+                glm::vec3 displaceVal = std::get<1>(tup);
+                glm::vec3 normalVal = std::get<2>(tup);
+
+                int row, col;
+                col = (int) trunc(uv.x * float(resolution));
+                row = (int) trunc(uv.y * float(resolution));
+
+                {
+                    //Add to usedPixels for use in blur algorithm
+                    if (usedPixels.find(col) == usedPixels.end()) {
+                        usedPixels.insert({col, {}});
+                    }
+                    usedPixels.at(col).insert(row);
+                }
+
+                if (displaceTex[row * resolution + col] != glm::vec3(0.0f, 0.0f, 0.0f) ||
+                    normalTex[row * resolution + col] != glm::vec3(0.0f, 0.0f, 0.0f)) {
+                    overlapCount++;
+                    overlaps.insert((row * resolution) + col);
+                    usedIndices.emplace_back(col, row);
+                    if ((float)overlapCount / (float)numTexCoords > maxPercentOverlap) {
+                        increaseResolution = true;
+                        break;
+                    }
+                } else {
+                    displaceTex[row * resolution + col] = displaceVal;
+                    normalTex[row * resolution + col] = normalVal;
+                }
+            }
+
+            if (!increaseResolution) {
+                break;
+            }
+            std::cout << "Increasing resolution..." << "\n\n";
         }
 
-        max = 0;
-        int issues = 0;
-        auto [offsetVal, maxVal] = findPPMOffset(texCoordVals);
+        w = resolution;
+        h = resolution;
+        std::cout << "Number of overlaps during texGen: " << overlapCount << "\n";
+        std::cout << "Resetting overlaps." << "\n";
+        for (const auto index : overlaps) {
+            displaceTex[index] = {};
+            normalTex[index] = {};
+        }
 
-        for (auto& pair : texCoordVals) {
-            glm::vec2 uv = pair.first;
-            glm::vec3 val = pair.second;
-
-            int row, col;
-            col = (int)trunc(uv.x * float(w));
-            row = (int)trunc(uv.y * float(h));
-            if (tex[row * w + col] != glm::vec3(0.0f, 0.0f, 0.0f)) {
-                issues++;
-            } else {
-//                if (ceil(val.r) > max) {
-//                    max = (int)ceil(val.r);
-//                }
-//                if (ceil(val.g) > max) {
-//                    max = (int)ceil(val.g);
-//                }
-//                if (ceil(val.b) > max) {
-//                    max = (int)ceil(val.b);
-//                }
-                tex[row * w + col] = val;
+        for (const auto& [col, row] : usedIndices) {
+            auto pos = usedPixels.at(col).find(row);
+            if (pos != usedPixels.at(col).end()) {
+                usedPixels.at(col).erase(pos);
             }
         }
-        max = (int)ceil(maxVal);
-        offset = offsetVal;
-        std::cout << "Overlap during texGen: " << issues << "\n";
-        std::cout << "Long displaces: " << testing.size() << "\n";
 
-        for (auto [tooLong, displace] : testing) {
-            bool hasMatch = tooLong->matchingFeature != nullptr;
-            std::string assignedBy = Utils::SectionString(tooLong->assignedBy);
-            std::cout << tooLong->vd << ": OnSeam = " << tooLong->isOnSeam << ", OnEdge = " << !tooLong->isInner << ", Anchored = " << tooLong->anchored
-                        << ", HasMatch = " << hasMatch << ", AssignedBy = " << assignedBy << "\n";
+        std::stringstream ss;
+        ss << "{";
+        int numCols = usedPixels.size();
+        int colCount = 1;
+        for (const auto& [col, rows] : usedPixels) {
+            ss << col << ":{" ;
+            int numRows = rows.size();
+            int rowCount = 1;
+            for (const auto& row : rows) {
+                ss << row << ":True";
+                if (rowCount++ < numRows) {
+                    ss << ",";
+                }
+            }
+            ss << "}";
+            if (colCount++ < numCols) {
+                ss << ",";
+            }
         }
-        testing.clear();
-
-        return tex;
+        ss << "}";
+        std::cout << ss.str() << std::endl;
     }
 
     ProcessEdgePtr findEdge(const ProcessFacePtr& face, const TessVertPtr& tessVert) {

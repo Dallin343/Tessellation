@@ -30,6 +30,7 @@ namespace IO {
     void ReadUV(const SurfaceMeshPtr& mesh, const std::string& filename);
 
     SeamMeshPtr AddSeams(const SurfaceMeshPtr& sm, const std::string& selectionsFile);
+    void AddSeamsFromFile(const SurfaceMeshPtr& mesh, const std::string& filename);
 
     void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, float offsetVal, unsigned int max, const std::string& file);
 };

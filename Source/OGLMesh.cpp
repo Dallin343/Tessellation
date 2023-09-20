@@ -36,9 +36,13 @@ void OGLMesh::setupMesh() {
     // vertex normals
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), (void*)offsetof(Prepare::VertexData, nrm));
-//    // vertex texCoords
+
+    // vertex color
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), (void*)offsetof(Prepare::VertexData, texCoords));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), (void*)offsetof(Prepare::VertexData, col));
+    // vertex texCoords
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), (void*)offsetof(Prepare::VertexData, texCoords));
 
     glBindVertexArray(0);
 }

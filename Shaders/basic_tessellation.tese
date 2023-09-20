@@ -2,9 +2,16 @@
 
 layout (triangles, equal_spacing, ccw) in;
 
-uniform sampler2D vProjectionMap;  // the texture corresponding to our projection map
+uniform int numTessLevels;
+uniform sampler2D vProjectionMaps[2];
+uniform sampler2D vNormalMaps[2];
+//uniform sampler2D vProjectionMap;  // the texture corresponding to our projection map
+//uniform sampler2D vNormalMap; // Normal map for tessellated vertices;
+uniform int texWidths[2];
+uniform int texHeights[2];
 uniform int texWidth;
 uniform int texHeight;
+
 uniform mat4 model;           // the model matrix
 uniform mat4 view;            // the view matrix
 uniform mat4 projection;      // the projection matrix
@@ -17,11 +24,15 @@ in vec2 TextureCoord[];
 
 in vec3 VertexNormal[];
 
+in ivec2 TessLevel[];
+
 // send to Fragment Shader for coloring
-//out float Height;
 out vec4 vertexColor;
 out vec3 normal;
 out vec3 FragPos;
+out vec2 TexCoord;
+
+vec4 calculateDisplacement(int tessLevel);
 
 void main()
 {
@@ -37,10 +48,57 @@ void main()
     vec2 t2 = TextureCoord[2];
 
     vec2 texCoord = u * t0 + v * t1 + w * t2;
-    vec4 vProject = texture(vProjectionMap, texCoord);
-    int u_int = int(trunc(texCoord.x * float(texWidth)));
-    int v_int = int(trunc(texCoord.y * float(texHeight)));
-    vec4 test = texelFetch(vProjectionMap, ivec2(u_int, v_int), 0);
+    TexCoord = texCoord;
+
+    int vertexTessIndex0 = TessLevel[0].x;
+    int vertexTessIndex1 = TessLevel[1].x;
+    int vertexTessIndex2 = TessLevel[2].x;
+    int innerIndex = TessLevel[0].y;
+
+    vec4 displace;
+    if (w == 0.0) {
+        // On 0-1 edge
+        displace = calculateDisplacement(max(vertexTessIndex0, vertexTessIndex1));
+
+        // Reset displacement for corner if its at a lower tessellation level
+        // ie its a transition vertex from higher to lower tessellation triangles.
+        if (v == 0.0 && vertexTessIndex0 == 0) {
+            // v0
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+        else if (u == 0.0 && vertexTessIndex1 == 0) {
+            // v1
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+    }
+    else if (v == 0.0) {
+        // on 2-0 edge
+        displace = calculateDisplacement(max(vertexTessIndex0, vertexTessIndex2));
+        if (w == 0.0 && vertexTessIndex0 == 0) {
+            // v0
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+        else if (u == 0.0 && vertexTessIndex2 == 0) {
+            // v2
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+    }
+    else if (u == 0.0) {
+        // on 1-2 edge
+        displace = calculateDisplacement(max(vertexTessIndex1, vertexTessIndex2));
+        if (v == 0.0 && vertexTessIndex2 == 0) {
+            // v2
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+        else if (w == 0.0 && vertexTessIndex1 == 0) {
+            // v1
+            displace = vec4(0.0, 0.0, 0.0, 0.0);
+        }
+    }
+    else {
+        // Inner vertex
+        displace = calculateDisplacement(innerIndex);
+    }
 
     // ----------------------------------------------------------------------
     // retrieve control point position coordinates
@@ -56,9 +114,9 @@ void main()
     // bilinearly interpolate position coordinate across patch
     vec4 p = p0*u + p1*v + p2*w;
 //    p += vec4(test.xyz, 0.0);
-    float testLen = length(test.xyz);
+    float testLen = length(displace.xyz);
 //    if (testLen < displacementThreshold) {
-        p += vec4(test.xyz, 0.0);
+        p += vec4(displace.xyz, 0.0);
 //    }
 
 
@@ -66,31 +124,34 @@ void main()
     vec4 c1 = VertexColor[1];
     vec4 c2 = VertexColor[2];
 //    vertexColor = normalize(vec4(u, v, w, 1.0));
-/*    if (test.xyz == vProject.xyz) {
+//    if (test.xyz == vProject.xyz) {
+//        vertexColor = vec4(0.0, 1.0, 0.0, 1.0);
+//    } else
+    if (displace.xyz == vec3(0.0, 0.0, 0.0)) {
+        vertexColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+    else if (normal == vec3(0.0, 0.0, 0.0)) {
         vertexColor = vec4(0.0, 1.0, 0.0, 1.0);
-    } else */
-    if (test.xyz == vec3(0.0, 0.0, 0.0)) {
-        vertexColor = vec4(0.0, 0.0, 0.0, 1.0);
     }
-//    else if (testLen >= displacementThreshold) {
-//        vertexColor = vec4(1.0, 0.0, 0.0, 1.0);
-//    }
     else {
-//        vertexColor = vec4(0.0, 0.0, 0.3, 1.0);
         vertexColor = c0*u + c1*v + c2*w;
-//        vertexColor = normalize(vec4(test.xyz, 1.0));
     }
 
-    vec3 n0 = VertexNormal[0];
-    vec3 n1 = VertexNormal[1];
-    vec3 n2 = VertexNormal[2];
-
-    vec4 uVec = p1 - p0;
-    vec4 vVec = p2 - p0;
-    normal = normalize(n0*u + n1*v + n2*w);
+//    vertexColor = vec4(normalize(normal), 1.0);
 
     // ----------------------------------------------------------------------
     // output patch point position in clip space
     gl_Position = projection * view * model * p;
     FragPos = vec3(model * vec4(p.xyz, 1.0));
+}
+
+vec4 calculateDisplacement(int tessLevel) {
+    int texRes = texWidths[tessLevel];
+
+    int u_int = int(trunc(TexCoord.x * float(texRes)));
+    int v_int = int(trunc(TexCoord.y * float(texRes)));
+    vec4 displace = texelFetch(vProjectionMaps[tessLevel], ivec2(u_int, v_int), 0);
+    normal = texture(vNormalMaps[tessLevel], TexCoord).rgb;
+
+    return displace;
 }

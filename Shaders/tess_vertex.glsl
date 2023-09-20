@@ -15,11 +15,8 @@ out vec2 TexCoord;
 out vec3 vertexNormal;
 
 void main() {
-//    gl_Position = projection * view * model * vec4(position, 1.0);
     gl_Position = vec4(position, 1.0);
-//    vertexColor = texture(vProjectionMap, texCoords);
     vertexColor = vec4(_vertexColor, 1.0);
     TexCoord = texCoords;
     vertexNormal = normal;
-//    vertexColor = vec4(0.0,0.0,0.0, 1.0);
 }

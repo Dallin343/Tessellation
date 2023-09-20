@@ -3,6 +3,8 @@
 uniform vec3 lightPos;
 uniform vec3 viewPos;
 uniform bool inWireframe;
+uniform sampler2D testTextureMap;
+uniform bool useTestTex;
 
 out vec4 FragColor;
 in vec4 vertexColor; // the input variable from the vertex shader (same name and same type)
@@ -13,10 +15,15 @@ in vec3 FragPos;
 
 void main()
 {
+    vec4 color = vertexColor;
     if (inWireframe) {
         FragColor = vertexColor;
         return;
     }
+    if (useTestTex) {
+        color = texture(testTextureMap, TexCoord);
+    }
+
     //Ambient
     float ambientStrength = 0.1;
     vec3 lightColor = vec3(1.0, 1.0, 1.0);
@@ -37,6 +44,6 @@ void main()
     vec3 specular = specularStrength * spec * lightColor;
 
 
-    vec3 result = (ambient + diffuse + specular) * vertexColor.xyz;
+    vec3 result = (ambient + diffuse + specular) * color.xyz;
     FragColor = vec4(result, 1.0);
 }

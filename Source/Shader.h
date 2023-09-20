@@ -5,6 +5,7 @@
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include <string>
 #include <fstream>
@@ -177,10 +178,18 @@ public:
     {
         glUniform1i(glGetUniformLocation(ID, name.c_str()), value);
     }
+    void setIntArr(const std::string &name, int* value, int count) const
+    {
+        glUniform1iv(glGetUniformLocation(ID, name.c_str()), count, value);
+    }
     // ------------------------------------------------------------------------
     void setFloat(const std::string &name, float value) const
     {
         glUniform1f(glGetUniformLocation(ID, name.c_str()), value);
+    }
+    void setFloatArr(const std::string &name, float* value, int count) const
+    {
+        glUniform1fv(glGetUniformLocation(ID, name.c_str()), count, value);
     }
     // ------------------------------------------------------------------------
     void setVec2(const std::string &name, const glm::vec2 &value) const
@@ -217,6 +226,10 @@ public:
     void setVec4(const std::string &name, int x, int y, int z, int w) const
     {
         glUniform4i(glGetUniformLocation(ID, name.c_str()), x, y, z, w);
+    }
+    void setVec4Arr(const std::string &name, const glm::ivec4* value, int count) const
+    {
+        glUniform4iv(glGetUniformLocation(ID, name.c_str()), count, glm::value_ptr(value[0]));
     }
     // ------------------------------------------------------------------------
     void setMat2(const std::string &name, const glm::mat2 &mat) const

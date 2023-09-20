@@ -560,6 +560,18 @@ namespace Strategy {
 
     void minBiGraphMatch(const ProcessFacePtr& processFace, const FeatureVerts& featureVerts, Stats& stats);
 
+    class GaussCmp
+    {
+    public:
+        bool operator()(const std::pair<double, TessVertPtr>& a, const std::pair<double, TessVertPtr>& b) const {
+            return abs(a.first) < abs(b.first);
+        }
+    };
+    typedef std::pair<double, TessVertPtr> GVPair;
+    typedef std::set<GVPair, GaussCmp> FlipResult;
+    bool checkFlips(const ProcessFacePtr& processFace, SurfaceMesh& sm, const SurfaceMesh& highResMesh,
+                    const Gauss_vertex_pmap& gaussMap, FlipResult& flipped);
+
     void moveAndValidate(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh,
                          const Gauss_vertex_pmap& gaussMap, Stats& stats);
 

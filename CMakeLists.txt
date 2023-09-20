@@ -84,7 +84,7 @@ add_executable(Tessellation
 #        Source/FastDecimator/Heap.h
 #        Source/FastDecimator/Mesh.h
 #        Source/FastDecimator/Mesh.cpp
-        Source/Mapping.cpp)
+        Source/Mapping.cpp Source/Evaluation.cpp Source/Evaluation.h)
 
 if(CGAL_Qt5_FOUND)
 target_link_libraries(Tessellation PRIVATE
