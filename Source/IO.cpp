@@ -4,6 +4,7 @@
 
 #include "IO.h"
 #include "lodepng.h"
+#include <tiffio.h>
 #include <cstring>
 
 namespace IO {
@@ -405,35 +406,62 @@ namespace IO {
 
     void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, float offsetVal, unsigned int max, const std::string& file) {
         std::cout << "Writing texture...\n";
-        std::ofstream out(file);
+//        std::ofstream out(file);
         const float maxOffset = (float)max + offsetVal;
-        out << "P6\n" << w << "\n" << h << "\n255\n";// << max << "\n";
+        TIFF* tiff = TIFFOpen(file.c_str(), "w");
+        if (tiff) {
+            uint32_t imagelength = h;
+            tdata_t buf;
+            uint32_t row;
+
+            TIFFSetField(tiff, TIFFTAG_IMAGEWIDTH, w);
+            TIFFSetField(tiff, TIFFTAG_IMAGELENGTH, h);
+            TIFFSetField(tiff, TIFFTAG_BITSPERSAMPLE, 32, 32, 32);
+            TIFFSetField(tiff, TIFFTAG_COMPRESSION, 1);
+            TIFFSetField(tiff, TIFFTAG_SAMPLESPERPIXEL, 3);
+            TIFFSetField(tiff, TIFFTAG_SAMPLEFORMAT, 3, 3, 3); //floats
+            TIFFSetField(tiff, TIFFTAG_PHOTOMETRIC, 2);
+            TIFFSetField(tiff, TIFFTAG_ROWSPERSTRIP, h);
+
+
+            std::vector<glm::vec3> rowData{};
+            for (row = 0; row < imagelength; row++) {
+                rowData.clear();
+                rowData.reserve(w);
+                auto start = tex.begin() + (row * w);
+                rowData.insert(rowData.begin(), start, start + w);
+                TIFFWriteScanline(tiff, rowData.data(), row, 0);
+            }
+            TIFFClose(tiff);
+        }
+
 //        if (max < 256) {
 //            std::cout << "Using single byte storage. (max = " << max << ")\n";
 //        }
 //        else {
 //            std::cout << "Using double byte storage. (max = " << max << ")\n";
 //        }
-        for (const auto& pixel : tex) {
-            auto r = pixel.r, g = pixel.g, b = pixel.b;
-
-//            if (max == 0 && (r != 0.0f && g != 0.0f && b != 0.0f)) {
-//                out << (unsigned char)200;
-//                out << (unsigned char)50;
-//                out << (unsigned char)0;
-//            }
-//            else if (max == 0 && (r == 0.0f || g == 0.0f || b != 0.0f)) {
-//                out << (unsigned char)0;
-//                out << (unsigned char)200;
-//                out << (unsigned char)0;
-//            }
-//            if {
-                out << (unsigned char)floor(r);
-                out << (unsigned char)floor(g);
-                out << (unsigned char)floor(b);
-//            }
-        }
-        out.flush();
+//        for (const auto& pixel : tex) {
+//            auto r = pixel.r, g = pixel.g, b = pixel.b;
+//
+////            if (max == 0 && (r != 0.0f && g != 0.0f && b != 0.0f)) {
+////                out << (unsigned char)200;
+////                out << (unsigned char)50;
+////                out << (unsigned char)0;
+////            }
+////            else if (max == 0 && (r == 0.0f || g == 0.0f || b != 0.0f)) {
+////                out << (unsigned char)0;
+////                out << (unsigned char)200;
+////                out << (unsigned char)0;
+////            }
+////            if {
+//                out << (unsigned char)floor(r);
+//                out << (unsigned char)floor(g);
+//                out << (unsigned char)floor(b);
+////            }
+//        }
+//        out.flush();
+//        TIFFClose(tiff);
     }
 }
 

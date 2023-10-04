@@ -128,31 +128,56 @@ namespace Utils {
         return gaussMap;
     }
 
-    std::optional<Point_3> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree) {
+    std::optional<std::pair<Point_3, Vector>> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree, SurfaceMesh& mesh) {
         Ray forwardRay(p, nrm);
         Ray reverseRay(p, -nrm);
 
         Ray_intersection forwardIntersection = tree.first_intersection(forwardRay);
         Ray_intersection reverseIntersection = tree.first_intersection(reverseRay);
         Point_3 forwardPoint, reversePoint;
+        Primitive_id forwardPrimitive, reversePrimitive;
         bool foundForward = false, foundReverse = false;
 
         if (forwardIntersection && boost::get<Point_3>(&(forwardIntersection->first))) {
             forwardPoint = *boost::get<Point_3>(&(forwardIntersection->first));
+            forwardPrimitive = boost::get<Primitive_id>(forwardIntersection->second);
             foundForward = true;
         }
         if (reverseIntersection && boost::get<Point_3>(&(reverseIntersection->first))) {
             reversePoint = *boost::get<Point_3>(&(reverseIntersection->first));
+            reversePrimitive = boost::get<Primitive_id>(reverseIntersection->second);
             foundReverse = true;
         }
 
+        Vector forwardNorm, reverseNorm;
+        if (foundForward) {
+            std::array<Point_3, 3> points;
+            int i = 0;
+            for (auto vd : mesh.vertices_around_face(mesh.halfedge(forwardPrimitive))) {
+                points.at(i++) = mesh.point(vd);
+            }
+            forwardNorm = compute_face_normal(points.at(0), points.at(1), points.at(2));
+        }
+        if (foundReverse) {
+            std::array<Point_3, 3> points;
+            int i = 0;
+            for (auto vd : mesh.vertices_around_face(mesh.halfedge(reversePrimitive))) {
+                points.at(i++) = mesh.point(vd);
+            }
+            reverseNorm = compute_face_normal(points.at(0), points.at(1), points.at(2));
+        }
+
         if (foundForward && foundReverse) {
-            return CGAL::squared_distance(p, forwardPoint) < CGAL::squared_distance(p, reversePoint)
-                   ? forwardPoint : reversePoint;
+            if (CGAL::squared_distance(p, forwardPoint) < CGAL::squared_distance(p, reversePoint)) {
+                return std::pair<Point_3, Vector>(forwardPoint, forwardNorm);
+            }
+            else {
+                return std::pair<Point_3, Vector>(reversePoint, reverseNorm);
+            }
         } else if (foundForward) {
-            return forwardPoint;
+            return std::pair<Point_3, Vector>(forwardPoint, forwardNorm);
         } else if (foundReverse) {
-            return reversePoint;
+            return std::pair<Point_3, Vector>(reversePoint, reverseNorm);
         }
         return std::nullopt;
     }

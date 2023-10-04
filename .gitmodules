@@ -16,3 +16,6 @@
 [submodule "Vendor/mapping"]
 	path = Vendor/mapping
 	url = https://github.com/patr-schm/surface-maps-via-adaptive-triangulations
+[submodule "Vendor/tinytiff"]
+	path = Vendor/tinytiff
+	url = https://github.com/jkriege2/TinyTIFF

@@ -252,14 +252,16 @@ namespace Prepare {
 
         int overlapCount;
         std::unordered_set<int> overlaps;
-        float maxPercentOverlap = 0.01;
+        float maxPercentOverlap = 0.005;
         int resolution = 64;
 
         std::unordered_map<int, std::unordered_set<int>> usedPixels = {};
         std::vector<std::pair<int, int>> usedIndices = {};
 
-        for (; resolution <= 4192; resolution *= 2) {
+        for (; resolution <= 4096; resolution *= 2) {
             std::cout << "Generating Texture with resolution: " << resolution << "\n";
+            w = resolution;
+            h = resolution;
             overlapCount = 0;
             overlaps.clear();
             usedPixels.clear();
@@ -286,17 +288,17 @@ namespace Prepare {
 
                 {
                     //Add to usedPixels for use in blur algorithm
-                    if (usedPixels.find(col) == usedPixels.end()) {
-                        usedPixels.insert({col, {}});
+                    if (usedPixels.find(row) == usedPixels.end()) {
+                        usedPixels.insert({row, {}});
                     }
-                    usedPixels.at(col).insert(row);
+                    usedPixels.at(row).insert(col);
                 }
 
                 if (displaceTex[row * resolution + col] != glm::vec3(0.0f, 0.0f, 0.0f) ||
                     normalTex[row * resolution + col] != glm::vec3(0.0f, 0.0f, 0.0f)) {
                     overlapCount++;
                     overlaps.insert((row * resolution) + col);
-                    usedIndices.emplace_back(col, row);
+                    usedIndices.emplace_back(row, col);
                     if ((float)overlapCount / (float)numTexCoords > maxPercentOverlap) {
                         increaseResolution = true;
                         break;
@@ -313,8 +315,6 @@ namespace Prepare {
             std::cout << "Increasing resolution..." << "\n\n";
         }
 
-        w = resolution;
-        h = resolution;
         std::cout << "Number of overlaps during texGen: " << overlapCount << "\n";
         std::cout << "Resetting overlaps." << "\n";
         for (const auto index : overlaps) {
@@ -322,34 +322,34 @@ namespace Prepare {
             normalTex[index] = {};
         }
 
-        for (const auto& [col, row] : usedIndices) {
-            auto pos = usedPixels.at(col).find(row);
-            if (pos != usedPixels.at(col).end()) {
-                usedPixels.at(col).erase(pos);
-            }
-        }
-
-        std::stringstream ss;
-        ss << "{";
-        int numCols = usedPixels.size();
-        int colCount = 1;
-        for (const auto& [col, rows] : usedPixels) {
-            ss << col << ":{" ;
-            int numRows = rows.size();
-            int rowCount = 1;
-            for (const auto& row : rows) {
-                ss << row << ":True";
-                if (rowCount++ < numRows) {
-                    ss << ",";
-                }
-            }
-            ss << "}";
-            if (colCount++ < numCols) {
-                ss << ",";
-            }
-        }
-        ss << "}";
-        std::cout << ss.str() << std::endl;
+//        for (const auto& [row, col] : usedIndices) {
+//            auto pos = usedPixels.at(row).find(col);
+//            if (pos != usedPixels.at(row).end()) {
+//                usedPixels.at(row).erase(pos);
+//            }
+//        }
+//
+//        std::stringstream ss;
+//        ss << "{";
+//        int numRows = usedPixels.size();
+//        int rowCount = 1;
+//        for (const auto& [row, cols] : usedPixels) {
+//            ss << row << ":{" ;
+//            int numCols = cols.size();
+//            int colCount = 1;
+//            for (const auto& col : cols) {
+//                ss << col << ":True";
+//                if (colCount++ < numCols) {
+//                    ss << ",";
+//                }
+//            }
+//            ss << "}";
+//            if (rowCount++ < numRows) {
+//                ss << ",";
+//            }
+//        }
+//        ss << "}";
+//        std::cout << ss.str() << std::endl;
     }
 
     ProcessEdgePtr findEdge(const ProcessFacePtr& face, const TessVertPtr& tessVert) {

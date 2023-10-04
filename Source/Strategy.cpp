@@ -411,8 +411,8 @@ namespace Strategy {
 #endif
     }
 
-    void projectEdgeVerts(const ProcessFacePtr& processFace, SurfaceMesh& sm, Tree& aabbTree, VertSet& interpolateVerts,
-                          TessEdgeMap& edgeVerts, Stats& stats) {
+    void projectEdgeVerts(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh, Tree& aabbTree,
+                          VertSet& interpolateVerts, TessEdgeMap& edgeVerts, Stats& stats) {
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
 
@@ -421,12 +421,14 @@ namespace Strategy {
             if (!vertex->isInner && !vertex->anchored && interpolateVerts.find(vertex) == interpolateVerts.end()) {
                 Point_3 vPoint = sm.point(vertex->vd);
                 Vector norm = get(vNorms, vertex->vd);
-                auto projOnNormal = Utils::findIntersection(vPoint, norm, aabbTree);
+                auto projOnNormal = Utils::findIntersection(vPoint, norm, aabbTree, highResMesh);
                 if (projOnNormal.has_value()) {
-                    vertex->newCoords = Utils::toGLM(projOnNormal.value());
+                    auto [point, nrm] = projOnNormal.value();
+                    vertex->newCoords = Utils::toGLM(point);
                     vertex->anchored = true;
                     vertex->assignedBy = AssigningSection::ProjectEdge;
-                    sm.point(vertex->vd) = projOnNormal.value();
+                    sm.point(vertex->vd) = point;
+                    put(vNorms, vertex->vd, nrm);
                 } else {
                     interpolateVerts.insert(vertex);
                 }
@@ -665,12 +667,14 @@ namespace Strategy {
             if (!tessVert->isAssigned()) {
                 Point_3 vPoint = sm.point(tessVert->vd);
                 Vector norm = get(vNorms, tessVert->vd);
-                auto projOnNormal = Utils::findIntersection(vPoint, norm, aabbTree);
+                auto projOnNormal = Utils::findIntersection(vPoint, norm, aabbTree, highResMesh);
                 if (projOnNormal.has_value()) {
-                    auto newCoords = Utils::toGLM(projOnNormal.value());
+                    auto [point, nrm] = projOnNormal.value();
+                    auto newCoords = Utils::toGLM(point);
                     tessVert->newCoords = newCoords;
                     tessVert->assignedBy = AssigningSection::ProjectValidate;
-                    sm.point(tessVert->vd) = projOnNormal.value();
+                    sm.point(tessVert->vd) = point;
+                    put(vNorms, tessVert->vd, nrm);
                 }
             }
         }

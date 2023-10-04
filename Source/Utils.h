@@ -32,7 +32,7 @@ namespace Utils {
     Point_3 toPoint3(glm::vec3 p);
 
     Gauss_vertex_pmap CalculateGaussianCurvature(SurfaceMesh& mesh);
-    std::optional<Point_3> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree);
+    std::optional<std::pair<Point_3, Vector>> findIntersection(const Point_3& p, const Vector& nrm, const Tree& tree, SurfaceMesh& mesh);
 
     std::string SectionString(AssigningSection section);
 

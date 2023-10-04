@@ -553,8 +553,8 @@ namespace Strategy {
     void tessellateFace(const ProcessFacePtr& processFace, SurfaceMesh& sm, const TessLevel& tL,
                         TessEdgeMap& edgeVerts, Stats& stats);
 
-    void projectEdgeVerts(const ProcessFacePtr& processFace, SurfaceMesh& sm, Tree& aabbTree, VertSet& interpolateVerts,
-                          TessEdgeMap& edgeVerts, Stats& stats);
+    void projectEdgeVerts(const ProcessFacePtr& processFace, SurfaceMesh& sm, SurfaceMesh& highResMesh, Tree& aabbTree,
+                          VertSet& interpolateVerts, TessEdgeMap& edgeVerts, Stats& stats);
 
     FeatureVerts extractFeatureVertices(const SurfaceMesh& sm, const ProcessFacePtr& tri, const SurfaceMesh& highResMesh, Stats& stats);
 

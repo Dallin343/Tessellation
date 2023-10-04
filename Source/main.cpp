@@ -74,7 +74,8 @@ static void GLFWErrorCallback(int error, const char* description) {
 constexpr unsigned int NUM_TESS_LEVELS = 1;
 typedef std::array<TessLevel, NUM_TESS_LEVELS> TessLevels;
 TessLevels tessLevels {{
-                               {2, 2, 2, 3},
+                               {7, 7, 7, 7},
+//                               {2, 2, 2, 3},
 //                               {3, 3, 3, 3},
 //                               {3, 3, 3, 4},
                        }};
@@ -221,6 +222,8 @@ int main(int argc, char** argv)
     fNorms = sm->property_map<SM_face_descriptor, Vector>("f:normal").first;
     vNorms = sm->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
 
+    CGAL::Polygon_mesh_processing::compute_normals(*sm, vNorms, fNorms);
+
     std::array<TessLevelData, NUM_TESS_LEVELS> allTessMeshes;
     for (int i = 0; i < NUM_TESS_LEVELS; i++) {
         allTessMeshes.at(i) = {};
@@ -334,15 +337,11 @@ int main(int argc, char** argv)
 
                 currTessLevel.processedFaces.insert({fd, processFace});
 
-                if (processFace->fd.idx() == 988) {
-                    int x = 1;
-                }
-
                 auto featureVerts = Strategy::extractFeatureVertices(*sm, processFace, *highResMesh, stats);
 
 
                 Strategy::tessellateFace(processFace, *sm_copy, tessLevels.at(i), currTessLevel.processedEdges, stats);
-                Strategy::projectEdgeVerts(processFace, *sm_copy, aabbTree, currTessLevel.interpolateVerts,
+                Strategy::projectEdgeVerts(processFace, *sm_copy, *highResMesh, aabbTree, currTessLevel.interpolateVerts,
                                            currTessLevel.processedEdges, stats);
 
                 Strategy::minBiGraphMatch(processFace, featureVerts, stats);
@@ -499,12 +498,12 @@ int main(int argc, char** argv)
         std::cout << Utils::SectionString(key) << ": " << val << "\n";
     }
 
-    //Run evaluation
-//    std::vector<SurfaceMeshPtr> evalMeshes;
-//    for (auto tessMesh : allTessMeshes) {
-//        evalMeshes.push_back(tessMesh.mesh);
-//    }
-//    auto errors = Evaluation::error(highResMesh, evalMeshes);
+//    Run evaluation
+    std::vector<SurfaceMeshPtr> evalMeshes;
+    for (auto tessMesh : allTessMeshes) {
+        evalMeshes.push_back(tessMesh.mesh);
+    }
+    auto errors = Evaluation::error(highResMesh, evalMeshes);
 
     Prepare::OGLData modelData = Prepare::toOGL(*sm);
     auto oglMesh = std::make_shared<OGLMesh>(modelData);
@@ -534,6 +533,7 @@ int main(int argc, char** argv)
     Prepare::createTextures(sm, {sm}, simpleTex->width, simpleTex->height, simpleTex->displacement, simpleTex->normal);
     TessOglMesh simplifiedOglMesh {oglMesh, simpleTex, {1, 1, 1, 1}};
     tessOglMeshes.push_back(simplifiedOglMesh);
+    IO::WriteTexture(simpleTex->normal, simpleTex->width, simpleTex->height, 0.0, 0, dataDir / "out" / "simple_nrm.tiff");
 
     int tessLevelIndex = 0;
     for (auto& tessMesh : allTessMeshes) {
@@ -542,8 +542,8 @@ int main(int argc, char** argv)
         TessOglMesh tessOglMesh {oglMesh, tessTex, tessLevels.at(tessLevelIndex)};
         tessOglMeshes.push_back(tessOglMesh);
         if (EXPORT_TEXTURE) {
-            auto texstr = std::to_string(tessLevelIndex) + "_tex.ppm";
-            auto nrmstr = std::to_string(tessLevelIndex) + "_nrm.ppm";
+            auto texstr = std::to_string(tessLevelIndex) + "_tex.tiff";
+            auto nrmstr = std::to_string(tessLevelIndex) + "_nrm.tiff";
             IO::WriteTexture(tessTex->displacement, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / texstr);
             IO::WriteTexture(tessTex->normal, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / nrmstr);
         }
@@ -589,7 +589,7 @@ int main(int argc, char** argv)
     highResOglMesh->setupMesh();
 
     int width, height, nrChannels;
-    const std::string nrmPath = dataDir / "checkersmall.png";
+    std::string nrmPath = dataDir / "checkersmall.png";
     stbi_set_flip_vertically_on_load(true);
     unsigned char *tex = stbi_load(nrmPath.c_str(), &width, &height, &nrChannels, 0);
     if (!tex) {
@@ -607,6 +607,16 @@ int main(int argc, char** argv)
     glPixelStorei( GL_UNPACK_ALIGNMENT, 1 );
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
     stbi_image_free(tex);
+
+    // TEMPORARY
+    nrmPath = dataDir / "blurred_nrm.png";
+    stbi_set_flip_vertically_on_load(true);
+    tex = stbi_load(nrmPath.c_str(), &width, &height, &nrChannels, 0);
+    if (!tex) {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+
+    ///////// TEMPORARY
 
     int glTexIndex = 1;
     for (const auto& tessOglMesh : tessOglMeshes) {
@@ -628,15 +638,27 @@ int main(int argc, char** argv)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, tessTex->width, tessTex->height, 0, GL_RGB, GL_FLOAT, tessTex->normal.data());
+//        if (glTexIndex == 5) {
+//            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, tex);
+//        } else {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, tessTex->width, tessTex->height, 0, GL_RGB, GL_FLOAT, tessTex->normal.data());
+//        }
     }
 
+
     // Load Shader
-    auto tess_shader = Shader(
-            "../Shaders/tess_vertex.glsl",
-            "../Shaders/tess_frag.glsl",
-            "../Shaders/basic_tessellation.tesc",
-            "../Shaders/basic_tessellation.tese"
+    auto standard_tess_shader = Shader(
+            "../Shaders/standard/tess_vertex.glsl",
+            "../Shaders/standard/tess_frag.glsl",
+            "../Shaders/standard/tess_control.tesc",
+            "../Shaders/standard/tess_evaluation.tese"
+    );
+
+    auto dynamic_tess_shader = Shader(
+            "../Shaders/dynamic/tess_vertex.glsl",
+            "../Shaders/dynamic/tess_frag.glsl",
+            "../Shaders/dynamic/tess_control.tesc",
+            "../Shaders/dynamic/tess_evaluation.tese"
             );
 
     auto plain_shader = Shader(
@@ -644,9 +666,8 @@ int main(int argc, char** argv)
             "../Shaders/default_frag.glsl"
     );
 
-    glm::mat4 model = glm::mat4(1.0f), plain_model(1.0f);
+    glm::mat4 model = glm::mat4(1.0f);
     model = glm::rotate(glm::scale(model, glm::vec3{0.8f, 0.8f, 0.8f}), 45.0f, glm::vec3{0.0f, 1.0f, 0.0f});
-    plain_model = glm::rotate(glm::scale(plain_model, glm::vec3{0.8f, 0.8f, 0.8f}), 45.0f, glm::vec3{0.0f, 1.0f, 0.0f});
 
 
     glm::mat4 projection;
@@ -679,46 +700,51 @@ int main(int argc, char** argv)
                 {0.886213, 0.097899, -0.452816, 0.000000},
                 {20.044111, -153.227295, -64.848488, 1.000000}
         };
-        tess_shader.use();
+        dynamic_tess_shader.use();
         if (viewSettings.testView) {
-            tess_shader.setMat4("view", tempView);
+            dynamic_tess_shader.setMat4("view", tempView);
         } else {
-            tess_shader.setMat4("view", camera.GetViewMatrix());
+            dynamic_tess_shader.setMat4("view", camera.GetViewMatrix());
         }
-        tess_shader.setMat4("projection", projection);
-        tess_shader.setVec3("lightPos", glm::vec3(0.0, 200.0, 1000.0));
-        tess_shader.setVec3("viewPos", camera.Position);
-        tess_shader.setBool("useTestTex", viewSettings.useTestTex);
-        tess_shader.setInt("testTextureMap", 0);
-        tess_shader.setInt("numTessLevels", 2);
-        if (viewSettings.useTestTex) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, testTextureID);
+        dynamic_tess_shader.setMat4("projection", projection);
+        dynamic_tess_shader.setVec3("lightPos", glm::vec3(0.0, 200.0, 1000.0));
+        dynamic_tess_shader.setVec3("viewPos", camera.Position);
+//        dynamic_tess_shader.setBool("useTestTex", viewSettings.useTestTex);
+        dynamic_tess_shader.setInt("testTextureMap", 0);
+        dynamic_tess_shader.setInt("numTessLevels", 2);
+//        if (viewSettings.useTestTex) {
+//        glActiveTexture(GL_TEXTURE0);
+//        glBindTexture(GL_TEXTURE_2D, testTextureID);
+//        }
+
+//        auto firstMesh = tessOglMeshes.at(0), secondMesh = tessOglMeshes.at(1);
+        int projectionMaps[2], normalMaps[2], texResolutions[2];
+        glm::ivec4 shaderTessLevels[2];
+        for (int i = 0; i < NUM_TESS_LEVELS+1; i++) {
+            projectionMaps[i] = tessOglMeshes.at(i).tex->displaceTexUnit;
+            normalMaps[i] = tessOglMeshes.at(i).tex->normalTexUnit;
+            texResolutions[i] = tessOglMeshes.at(i).tex->height;
+            shaderTessLevels[i] = tessOglMeshes.at(i).tessLevel.toGLM();
         }
+//        int projectionMaps[4] = {static_cast<int>(firstMesh.tex->displaceTexUnit), static_cast<int>(secondMesh.tex->displaceTexUnit)};
+//        int normalMaps[4] = {static_cast<int>(firstMesh.tex->normalTexUnit), static_cast<int>(secondMesh.tex->normalTexUnit)};
+//        int texWidths[4] = {firstMesh.tex->width, secondMesh.tex->width};
+//        int texHeights[4] = {firstMesh.tex->height, secondMesh.tex->height};
 
-        auto firstMesh = tessOglMeshes.at(0), secondMesh = tessOglMeshes.at(1);
-        int projectionMaps[2] = {static_cast<int>(firstMesh.tex->displacementID), static_cast<int>(secondMesh.tex->displacementID)};
-        int normalMaps[2] = {static_cast<int>(firstMesh.tex->normalID), static_cast<int>(secondMesh.tex->normalID)};
-        int texWidths[2] = {firstMesh.tex->width, secondMesh.tex->width};
-        int texHeights[2] = {firstMesh.tex->height, secondMesh.tex->height};
+        dynamic_tess_shader.setIntArr("vProjectionMaps", projectionMaps, 2);
+        dynamic_tess_shader.setIntArr("vNormalMaps", normalMaps, 2);
+        dynamic_tess_shader.setIntArr("texRes", texResolutions, 2);
+        dynamic_tess_shader.setMat4("model", model);
 
-        tess_shader.setIntArr("vProjectionMaps", projectionMaps, 2);
-        tess_shader.setIntArr("vNormalMaps", normalMaps, 2);
-        tess_shader.setIntArr("texWidths", texWidths, 2);
-        tess_shader.setIntArr("texHeights", texHeights, 2);
-        tess_shader.setMat4("model", model);
+//        glm::ivec4 shaderTessLevels[2] = {
+//                firstMesh.tessLevel.toGLM(),
+//                secondMesh.tessLevel.toGLM(),
+//        };
+        dynamic_tess_shader.setVec4Arr("tessellationLevels", shaderTessLevels, 2);
 
-        glm::ivec4 shaderTessLevels[2] = {
-                firstMesh.tessLevel.toGLM(),
-                secondMesh.tessLevel.toGLM(),
-        };
-        tess_shader.setVec4Arr("tessellationLevels", shaderTessLevels, 2);
+        float distances[2] = {200, 00.0};//, 50.0,0.0};
+        dynamic_tess_shader.setFloatArr("tessellationLevelDistances", distances, 2);
 
-        float distances[2] = {150.0, 0.0};
-        tess_shader.setFloatArr("tessellationLevelDistances", distances, 2);
-//        tess_shader.setFloat("tessellationLevelDistance0", 50.0f);
-//        tess_shader.setFloat("tessellationLevelDistance1", 2.0f);
-        float xPos = -300.f;
         for (const auto& tessOglMesh : tessOglMeshes) {
             auto tessTex = tessOglMesh.tex;
             glActiveTexture(tessTex->displaceTexUnit);
@@ -727,26 +753,50 @@ int main(int argc, char** argv)
             glBindTexture(GL_TEXTURE_2D, tessTex->normalID);
         }
 
-        oglMesh->draw(tess_shader, OGLMesh::Patches);
+        oglMesh->draw(dynamic_tess_shader, OGLMesh::Patches);
+
+//        plain_shader.use();
+//        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{200.0f, 0.f, 0.f}));
+//        plain_shader.setMat4("view", camera.GetViewMatrix());
+//        plain_shader.setMat4("projection", projection);
+//        plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
+//        plain_shader.setVec3("viewPos", camera.Position);
+//        plain_shader.setBool("useTestTex", viewSettings.useTestTex);
+//        plain_shader.setInt("testTextureMap", 0);
+//        if (viewSettings.showLines) {
+//            plain_shader.setBool("inWireframe", true);
+//        }
+//        else {
+//            plain_shader.setBool("inWireframe", false);
+//        }
+//
+//        testTessOglMesh->draw(plain_shader, OGLMesh::Triangles);
+
+//        standard_tess_shader.use();
+//        standard_tess_shader.setMat4("model", glm::translate(model, glm::vec3{200.0f, 0.f, 0.f}));
+//        standard_tess_shader.setMat4("view", camera.GetViewMatrix());
+//        standard_tess_shader.setMat4("projection", projection);
+//        standard_tess_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
+//        standard_tess_shader.setVec3("viewPos", camera.Position);
+//        standard_tess_shader.setBool("useTestTex", viewSettings.useTestTex);
+//        standard_tess_shader.setInt("testTextureMap", 0);
+//        standard_tess_shader.setInt("vProjectionMap", firstMesh.tex->displaceTexUnit);
+//        standard_tess_shader.setInt("vNormalMap", firstMesh.tex->normalTexUnit);
+//        standard_tess_shader.setInt("texRes", firstMesh.tex->width);
+//        standard_tess_shader.setBool("inWireframe", viewSettings.showLines);
+//
+//        oglMesh->draw(standard_tess_shader, OGLMesh::Patches);
 
         plain_shader.use();
-        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{200.0f, 0.f, 0.f}));
         plain_shader.setMat4("view", camera.GetViewMatrix());
         plain_shader.setMat4("projection", projection);
         plain_shader.setVec3("lightPos", glm::vec3(0, 0.0, 1000.0));
         plain_shader.setVec3("viewPos", camera.Position);
         plain_shader.setBool("useTestTex", viewSettings.useTestTex);
         plain_shader.setInt("testTextureMap", 0);
-        if (viewSettings.showLines) {
-            plain_shader.setBool("inWireframe", true);
-        }
-        else {
-            plain_shader.setBool("inWireframe", false);
-        }
+        plain_shader.setBool("inWireframe", viewSettings.showLines);
 
-        testTessOglMesh->draw(plain_shader, OGLMesh::Triangles);
-
-        plain_shader.setMat4("model", glm::translate(plain_model, glm::vec3{-200.0f, 0.f, 0.f}));
+        plain_shader.setMat4("model", glm::translate(model, glm::vec3{-200.0f, 0.f, 0.f}));
         highResOglMesh->draw(plain_shader, OGLMesh::Triangles);
 
         glfwSwapBuffers(window);

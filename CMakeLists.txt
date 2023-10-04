@@ -16,6 +16,7 @@ include_directories(
         Vendor/cereal/include
         Vendor/spdlog/include
         Vendor/tclap/include
+        Vendor/tiff/libtiff
         Source
 #        Source/FastDecimator
 )
@@ -50,6 +51,7 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(Vendor/glfw)
 
 add_subdirectory(Vendor/spdlog)
+add_subdirectory(Vendor/tiff)
 
 #set(SURFACEMAPS_BUILD_APPS ON CACHE BOOL "" FORCE)
 #add_subdirectory(Vendor/mapping)
@@ -96,6 +98,7 @@ target_link_libraries(Tessellation PRIVATE
         CGAL::CGAL
         CGAL::CGAL_Core
         spdlog::spdlog
+        TIFF::tiff
 #        CGAL::CGAL_Basic_viewer
         )
 else()
@@ -108,6 +111,7 @@ else()
             CGAL::CGAL
             CGAL::CGAL_Core
             spdlog::spdlog
+            TIFF::tiff
             #        CGAL::CGAL_Basic_viewer
             )
 endif()
