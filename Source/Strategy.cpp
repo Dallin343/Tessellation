@@ -38,9 +38,12 @@ namespace Strategy {
         auto vNorms = sm.property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
         auto removed = sm.property_map<SM_vertex_descriptor, bool>("v:removed").first;
-        auto e01hd = sm.edge(sm.halfedge(processFace->vds.at(0), processFace->vds.at(1)));
-        auto e02hd = sm.edge(sm.halfedge(processFace->vds.at(0), processFace->vds.at(2)));
-        auto e12hd = sm.edge(sm.halfedge(processFace->vds.at(1), processFace->vds.at(2)));
+        auto hd01 = sm.halfedge(processFace->vds.at(0), processFace->vds.at(1));
+        auto hd12 = sm.halfedge(processFace->vds.at(2), processFace->vds.at(1));
+        auto hd20 = sm.halfedge(processFace->vds.at(2), processFace->vds.at(0));
+        auto e01hd = sm.edge(hd01);
+        auto e02hd = sm.edge(hd20);
+        auto e12hd = sm.edge(hd12);
 
         bool e01_exists = edgeVerts.find(e01hd) != edgeVerts.end();
         bool e02_exists = edgeVerts.find(e02hd) != edgeVerts.end();
@@ -56,7 +59,7 @@ namespace Strategy {
             processFace->e01 = edgeVerts.at(e01hd);
             e01Verts = processFace->e01->tessVerts;
         } else {
-            auto e01 = std::make_shared<ProcessEdge>(e01hd);
+            auto e01 = std::make_shared<ProcessEdge>(e01hd, hd01, sm.opposite(hd01));
             processFace->e01 = e01;
             edgeVerts.insert({e01hd, e01});
         }
@@ -65,7 +68,7 @@ namespace Strategy {
             processFace->e02 = edgeVerts.at(e02hd);
             e02Verts = processFace->e02->tessVerts;
         } else {
-            auto e02 = std::make_shared<ProcessEdge>(e02hd);
+            auto e02 = std::make_shared<ProcessEdge>(e02hd, hd20, sm.opposite(hd20));
             processFace->e02 = e02;
             edgeVerts.insert({e02hd, e02});
         }
@@ -74,7 +77,7 @@ namespace Strategy {
             processFace->e12 = edgeVerts.at(e12hd);
             e12Verts = processFace->e12->tessVerts;
         } else {
-            auto e12 = std::make_shared<ProcessEdge>(e12hd);
+            auto e12 = std::make_shared<ProcessEdge>(e12hd, hd12, sm.opposite(hd12));
             processFace->e12 = e12;
             edgeVerts.insert({e12hd, e12});
         }
@@ -168,13 +171,13 @@ namespace Strategy {
                     // On p1 - p2 edge
                     if (!e12_exists) {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
-                        tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.y, 0.0, 0.0));
+                        tessVert = std::make_shared<TessellatedVert>(coord, bary);
                         tessVert->vd = vd;
 //                        if (e12_is_seam) {
 //                            //If edge is a seam, make this vertex on seam.
 //                            tessVert->isOnSeam = true;
 //                        }
-                        processFace->e12->tessVerts.push_back(tessVert);
+                        processFace->e12->push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(1));
                         auto b = get(vNorms, processFace->vds.at(2));
@@ -183,10 +186,10 @@ namespace Strategy {
                     } else {
                         //TODO: FIX THIS!!! It'll be nasty
                         //Finds the given barycentric tessellated vert in the existing edges vector of tessVerts
-                        double testBary = processFace->e12->v0->vd == processFace->vds.at(1) ? bary.y : bary.z;
+//                        double testBary = processFace->e12->v0->vd == processFace->vds.at(1) ? bary.y : bary.z;
 
                         auto i = std::find_if(processFace->e12->tessVerts.begin(), processFace->e12->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return abs(a->baryCoords.x - testBary) <= 1e-6;
+                            return glm::all(glm::equal(a->otherBaryCoords, bary));
                         });
                         tessVert = *i;
                     }
@@ -210,10 +213,10 @@ namespace Strategy {
                         put(vNorms, vd, nrm);
                     } else {
                         //TODO: FIX THIS!!! It'll be nasty
-                        double testBary = processFace->e02->v0->vd == processFace->vds.at(0) ? bary.x : bary.z;
+//                        double testBary = processFace->e02->v0->vd == processFace->vds.at(0) ? bary.x : bary.z;
 
                         auto i = std::find_if(processFace->e02->tessVerts.begin(), processFace->e02->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return abs(a->baryCoords.x - testBary) <= 1e-6;
+                            return glm::all(glm::equal(a->otherBaryCoords, bary));
                         });
                         tessVert = *i;
                     }
@@ -236,10 +239,10 @@ namespace Strategy {
                         put(vNorms, vd, nrm);
                     } else {
                         //TODO: FIX THIS!!! It'll be nasty
-                        double testBary = processFace->e01->v0->vd == processFace->vds.at(0) ? bary.x : bary.y;
+//                        double testBary = processFace->e01->v0->vd == processFace->vds.at(0) ? bary.x : bary.y;
 
                         auto i = std::find_if(processFace->e01->tessVerts.begin(), processFace->e01->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return abs(a->baryCoords.x - testBary) <= 1e-6;
+                            return glm::all(glm::equal(a->otherBaryCoords, bary));
                         });
                         tessVert = *i;
                     }
@@ -264,30 +267,9 @@ namespace Strategy {
         }
         processFace->tessVerts = tessellatedVerts;
 
-        // temporarily save uvs for ends of a seam edge, so we can use them after the face is tessellated.
-//        struct SeamUV {
-//            Point_2 v0_v1, v1_vL, v1_v0, v0_vR;
-//        };
-//        std::unordered_map<SM_edge_descriptor, SeamUV> seamUVMap;
-//        auto addSeamUV = [&](const TessVertPtr& v0, const TessVertPtr& v1, SM_edge_descriptor ed) {
-//            SeamUV seamUV;
-//            auto v0_v1 = sm.halfedge(v0->vd, v1->vd), v1_v0 = sm.halfedge(v1->vd, v0->vd);;
-//            seamUV.v0_v1 = get(uvmap, v0_v1);
-//            seamUV.v1_v0 = get(uvmap, v1_v0);
-//            seamUV.v0_vR = get(uvmap, sm.next(v1_v0));
-//            seamUV.v1_vL = get(uvmap, sm.next(v0_v1));
-//            seamUVMap.insert({ed, seamUV});
-//        };
-//
-//        if (e01_is_seam && !e01_exists) {
-//            addSeamUV(processFace->e01->v0, processFace->e01->v1, e01hd);
-//        }
-//        if (e12_is_seam && !e12_exists) {
-//            addSeamUV(processFace->e12->v0, processFace->e01->v1, e12hd);
-//        }
-//        if (e02_is_seam && !e02_exists) {
-//            addSeamUV(processFace->e02->v0, processFace->e02->v1, e02hd);
-//        }
+        if (!e01_exists) processFace->e01->sort();
+        if (!e02_exists) processFace->e02->sort();
+        if (!e12_exists) processFace->e12->sort();
 
         //TODO: Maybe make new face normals based on vertex normals.
         //Add faces
@@ -315,95 +297,6 @@ namespace Strategy {
             auto nrm = Utils::compute_face_normal(Utils::toPoint3(v0->origCoords), Utils::toPoint3(v1->origCoords), Utils::toPoint3(v2->origCoords));
             put(fNorms, fd, nrm);
         }
-
-        auto setSeams = [&](const ProcessEdgePtr& e) {
-            auto& tessVerts = e->tessVerts;
-            std::sort(tessVerts.begin(), tessVerts.end(), [](const TessVertPtr& a, const TessVertPtr& b) {
-                return a->baryCoords.x < b->baryCoords.x;
-            });
-
-            auto v0 = e->v0, v1 = e->v1;
-            auto e0 = sm.edge(sm.halfedge(v1->vd, tessVerts.at(0)->vd)), e1 = sm.edge(sm.halfedge(tessVerts.at(tessVerts.size()-1)->vd, v0->vd));
-            put(eSeamMap, e0, true);
-            put(eSeamMap, e1, true);
-
-            for (int i = 0; i < tessVerts.size() - 1; i++) {
-                auto a = tessVerts.at(i);
-                auto b = tessVerts.at(i+1);
-                put(vSeamMap, a->vd, true);
-                put(eSeamMap, sm.edge(sm.halfedge(a->vd, b->vd)), true);
-            }
-        };
-
-        if (!e01_exists && e01_is_seam) {
-            setSeams(processFace->e01);
-        }
-        if (!e12_exists && e12_is_seam) {
-            setSeams(processFace->e12);
-        }
-        if (!e02_exists && e02_is_seam) {
-            setSeams(processFace->e02);
-        }
-
-//        auto calculateSeamUV = [&](const ProcessEdgePtr& e) {
-//            auto& tessVerts = e->tessVerts;
-//            std::sort(tessVerts.begin(), tessVerts.end(), [](const TessVertPtr& a, const TessVertPtr& b) {
-//                return a->baryCoords.x < b->baryCoords.x;
-//            });
-//
-//            std::vector<TessVertPtr> allVerts;
-//            allVerts.reserve(tessVerts.size() + 2);
-//            allVerts.push_back(e->v0);
-//            allVerts.insert(allVerts.end(), tessVerts.begin(), tessVerts.end());
-//            allVerts.push_back(e->v1);
-//
-//            auto seamUVs = seamUVMap.at(e->ed);
-//            auto v0_v1_vec = Utils::toGLM(seamUVs.v1_vL) - Utils::toGLM(seamUVs.v0_v1);
-//            auto v1_v0_vec = Utils::toGLM(seamUVs.v0_vR) - Utils::toGLM(seamUVs.v1_v0);
-//
-//            for (int i = 0; i < allVerts.size(); i++) {
-//                auto a = allVerts.at(i);
-//                auto b = allVerts.at(i + 1);
-//                auto hd = sm.halfedge(a->vd, b->vd);
-//                Point_2 uv;
-//                if (i == 0) {
-//                    uv = seamUVs.v0_v1;
-//                } else if (i == allVerts.size() - 1) {
-//                    uv = seamUVs.v1_vL;
-//                } else {
-//                    auto newUV = Utils::toGLM(seamUVs.v0_v1) + (v0_v1_vec * a->baryCoords.x);
-//                    uv = {newUV.x, newUV.y};
-//                }
-//
-//                put(uvmap, hd, uv);
-//            }
-//
-//            for (int i = allVerts.size() - 1; i > 0; i--) {
-//                auto a = allVerts.at(i);
-//                auto b = allVerts.at(i - 1);
-//                auto hd = sm.halfedge(a->vd, b->vd);
-//                Point_2 uv;
-//                if (i == allVerts.size() - 1) {
-//                    uv = seamUVs.v1_v0;
-//                } else if (i == 1) {
-//                    uv = seamUVs.v0_vR;
-//                } else {
-//                    auto newUV = Utils::toGLM(seamUVs.v1_v0) + (v1_v0_vec * (1.0f - a->baryCoords.x));
-//                    uv = {newUV.x, newUV.y};
-//                }
-//
-//                put(uvmap, hd, uv);
-//            }
-//        };
-//        if (e01_is_seam && !e01_exists) {
-//            calculateSeamUV(processFace->e01);
-//        }
-//        if (e12_is_seam && !e12_exists) {
-//            calculateSeamUV(processFace->e12);
-//        }
-//        if (e02_is_seam && !e02_exists) {
-//            calculateSeamUV(processFace->e02);
-//        }
 
         stats.processed_edges = edgeVerts.size();
 #if DRAW_STEPS || DRAW_T

@@ -404,15 +404,23 @@ public:
     }
 
     FeatureVertPtr matchingFeature = nullptr;
+    SM_halfedge_descriptor edgeHd;
     glm::vec3 origCoords;
     glm::vec3 newCoords{};
     glm::vec3 baryCoords;
+    glm::vec3 otherBaryCoords;
     glm::vec2 uv{};
+    glm::vec3 normal{};
     bool isInner = false;
     bool anchored = false;
     SM_vertex_descriptor vd;
     bool isOnSeam = false;
     AssigningSection assignedBy = Never;
+
+    glm::vec3 getBaryCoords(const SM_halfedge_descriptor& hd) {
+        if (hd == this->edgeHd) return baryCoords;
+        return otherBaryCoords;
+    }
 
     template<class Archive>
     void serialize(Archive& archive) {
@@ -441,10 +449,37 @@ class ProcessEdge {
 public:
     ProcessEdge() = default;
     ProcessEdge(const SM_edge_descriptor& ed) : ed(ed) {}
+    ProcessEdge(const SM_edge_descriptor& ed, const SM_halfedge_descriptor& hd, const SM_halfedge_descriptor& other) : ed(ed), hd(hd), otherHd(other) {}
 
+    SM_halfedge_descriptor hd, otherHd;
     SM_edge_descriptor ed;
     TessVertPtr v0, v1;
     std::vector<TessVertPtr> tessVerts;
+    std::vector<TessVertPtr> otherTessVerts;
+
+    const std::vector<TessVertPtr>& getTessVerts(const SM_halfedge_descriptor& h) {
+        if (h == hd) return tessVerts;
+        return otherTessVerts;
+    }
+
+    void sort() {
+        otherTessVerts.reserve(tessVerts.size());
+        otherTessVerts.insert(otherTessVerts.end(), tessVerts.rbegin(), tessVerts.rend());
+    }
+
+    void push_back(const TessVertPtr& tessVert) {
+        if (tessVert->baryCoords.x == 0.0f) {
+            tessVert->otherBaryCoords = {0.0f, tessVert->baryCoords.z, tessVert->baryCoords.y};
+        }
+        else if (tessVert->baryCoords.y == 0.0f) {
+            tessVert->otherBaryCoords = {tessVert->baryCoords.z, 0.0f, tessVert->baryCoords.x};
+        }
+        else if (tessVert->baryCoords.z == 0.0f) {
+            tessVert->otherBaryCoords = {tessVert->baryCoords.y, tessVert->baryCoords.x, 0.0f};
+        }
+        tessVert->edgeHd = hd;
+        tessVerts.push_back(tessVert);
+    }
 
     template<class Archive>
     void serialize(Archive& archive) {
@@ -469,6 +504,17 @@ public:
     std::vector<TessFacePtr> tessFaces;
     ProcessEdgePtr e01, e02, e12;
     VDToTessVert vdToTessVert;
+
+    std::vector<TessVertPtr> edgeVertices(const SM_halfedge_descriptor& hd) {
+        for (const auto& edge : {e01, e02, e01}) {
+            if (edge->hd == hd) {
+                return edge->tessVerts;
+            }
+            else if (edge->hd == hd) {
+                return edge->otherTessVerts;
+            }
+        }
+    }
 
     template<class Archive>
     void serialize(Archive& archive) {
@@ -512,6 +558,7 @@ namespace glm {
 
 struct TessLevelData {
     SurfaceMeshPtr mesh;
+    TessLevel level;
     TessEdgeMap processedEdges;
     ProcessFaceMap processedFaces;
     VertSet interpolateVerts;

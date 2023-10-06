@@ -117,7 +117,8 @@ Tessellator::TessellateTriangle(const Triangle &tri, int ol0, int ol1, int ol2, 
         // Innermost ring has no subdivisions; use it as a triangle as-is
         faces.push_back(buildFace(innermostUVVertexIndices.at(0), innermostVWVertexIndices.at(0),
                                   innermostWUVertexIndices.at(0), vertices, planeNrm));
-    } else {
+    }
+    else {
         // Innermost triangle is subdivided, generate faces between all the points on the ring and the centerpoint
         glm::vec3 centerVertex = ((u + v) + w) / 3.0f;
         vertices.push_back(centerVertex);

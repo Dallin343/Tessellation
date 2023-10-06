@@ -224,9 +224,9 @@ int main(int argc, char** argv)
 
     CGAL::Polygon_mesh_processing::compute_normals(*sm, vNorms, fNorms);
 
-    std::array<TessLevelData, NUM_TESS_LEVELS> allTessMeshes;
+    std::vector<TessLevelData> allTessMeshes;
     for (int i = 0; i < NUM_TESS_LEVELS; i++) {
-        allTessMeshes.at(i) = {};
+        allTessMeshes.emplace_back();
     }
 
     if (!IMPORT_PROCESSED_FACES)
