@@ -17,15 +17,24 @@ public:
         Triangles
     };
 
-    OGLMesh(const Prepare::OGLData& meshData);
+    OGLMesh(const Prepare::OGLData& meshData, bool multiRes = false);
+    void genMultiResBuffers();
     void setupMesh();
     void draw(const Shader& shader, Type drawType) const;
 
     unsigned int VAO, VBO, EBO;
+    unsigned int cornerBuffer, edgeBuffer, innerBuffer, faceBuffer;
+
+    bool multiRes;
 
     std::vector<Prepare::VertexData> vertices;
+    std::vector<glm::vec3> vertexPositions;
     std::vector<unsigned int> indices;
     std::vector<Prepare::FaceData> faces;
+    MultiResStorage::VAttrs cornerVertexData;
+    MultiResStorage::VAttrs edgeVertexData;
+    MultiResStorage::VAttrs innerVertexData;
+    MultiResStorage::FIdxs faceData;
 };
 
 

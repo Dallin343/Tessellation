@@ -6,19 +6,17 @@
 #define TESSELLATION_PREPARE_H
 
 #include "MeshImpl.h"
+#include "MultiResStorage.h"
 
 namespace Prepare {
     typedef std::vector<std::pair<glm::vec2, glm::vec3>> TexCoordVals;
-    typedef std::unordered_set<SM_edge_descriptor> EdgeSet;
 
     struct VertexData {
-        VertexData(const glm::vec3 &pos, const glm::vec3 &nrm, const glm::vec3 &col, const glm::vec2 &texCoords) : pos(pos), nrm(nrm), col(col),
-                                                                                                texCoords(texCoords) {}
+        VertexData(const glm::vec3 &pos) : pos(pos), normal() {}
+        VertexData(const glm::vec3 &pos, const glm::vec3& norm) : pos(pos), normal(norm) {}
 
         glm::vec3 pos;
-        glm::vec3 nrm;
-        glm::vec3 col;
-        glm::vec2 texCoords;
+        glm::vec3 normal;
     };
 
     struct FaceData {
@@ -30,15 +28,14 @@ namespace Prepare {
     struct OGLData {
         std::vector<VertexData> vertices;
         std::vector<FaceData> faces;
+        MultiResStorage::VAttrs cornerVertexData;
+        MultiResStorage::VAttrs edgeVertexData;
+        MultiResStorage::VAttrs innerVertexData;
+        MultiResStorage::FIdxs faceData;
     };
 
-    OGLData toOGL(const SurfaceMesh& sm);
-
-    void createTextures(const SurfaceMeshPtr& sm, const TessLevelData& data, int& w, int& h,
-                        std::vector<glm::vec3>& displaceTex, std::vector<glm::vec3>& normalTex);
-//    void processEdge(const ProcessEdgePtr& edge, const );
-    ProcessEdgePtr findEdge(const ProcessFacePtr& face, const TessVertPtr& tessVert);
-    glm::vec2 findMinDiff(TexCoordVals& texCoordVals);
+    OGLData toOGL(const SurfaceMeshPtr& sm);
+    OGLData toOGL(std::vector<TessLevelData>& meshes);
 };
 
 

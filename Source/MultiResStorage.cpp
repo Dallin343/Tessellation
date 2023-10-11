@@ -3,6 +3,7 @@
 //
 
 #include "MultiResStorage.h"
+#include "Utils.h"
 
 namespace MultiResStorage {
 
@@ -90,6 +91,7 @@ namespace MultiResStorage {
         std::unordered_map<SM_edge_descriptor, int> assignedEdges{};
 
         auto baseMesh = meshes.at(0).mesh;
+        auto baseVNorms = baseMesh->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
         for (auto face : baseMesh->faces()) {
             //Assign corner vertices first
             std::array<int, 3> firstCornerIndices{};
@@ -106,6 +108,11 @@ namespace MultiResStorage {
                 assignedCorners.insert({vd, corner.size()});
 
                 for (auto tessLevel : meshes) {
+                    if (tessLevel.level.isIdentity()) {
+                        corner.emplace_back(glm::vec3(0.0f, 0.0f, 0.0f), Utils::toGLM(get(baseVNorms, vd)));
+                        continue;
+                    }
+
                     auto tessFace = tessLevel.processedFaces.at(face);
                     for (auto tessVd : tessFace->vds) {
                         auto tessVert = tessFace->vdToTessVert.at(tessVd);

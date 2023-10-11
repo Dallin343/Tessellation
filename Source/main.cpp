@@ -400,7 +400,7 @@ int main(int argc, char** argv)
                     std::to_string(i) + "/" + std::to_string(NUM_TESS_LEVELS) + " [" + tessBarStates.at(++state) + "]"
             });
 
-            Strategy::calculateUVs(*sm_copy, *sm, currTessLevel.processedFaces);
+//            Strategy::calculateUVs(*sm_copy, *sm, currTessLevel.processedFaces);
 
             
             auto tLevel = tessLevels.at(i);
@@ -505,10 +505,10 @@ int main(int argc, char** argv)
     }
     auto errors = Evaluation::error(highResMesh, evalMeshes);
 
-    Prepare::OGLData modelData = Prepare::toOGL(*sm);
+    Prepare::OGLData modelData = Prepare::toOGL(sm);
     auto oglMesh = std::make_shared<OGLMesh>(modelData);
 
-    Prepare::OGLData tessModelData = Prepare::toOGL(*allTessMeshes.at(0).mesh);
+    Prepare::OGLData tessModelData = Prepare::toOGL(allTessMeshes);
     auto testTessOglMesh = std::make_shared<OGLMesh>(tessModelData);
 
     struct TessTexture {
@@ -529,29 +529,29 @@ int main(int argc, char** argv)
     std::vector<TessOglMesh> tessOglMeshes;
 
     // Create No tessellation model
-    auto simpleTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
-    Prepare::createTextures(sm, {sm}, simpleTex->width, simpleTex->height, simpleTex->displacement, simpleTex->normal);
-    TessOglMesh simplifiedOglMesh {oglMesh, simpleTex, {1, 1, 1, 1}};
-    tessOglMeshes.push_back(simplifiedOglMesh);
-    IO::WriteTexture(simpleTex->normal, simpleTex->width, simpleTex->height, 0.0, 0, dataDir / "out" / "simple_nrm.tiff");
+//    auto simpleTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
+//    Prepare::createTextures(sm, {sm}, simpleTex->width, simpleTex->height, simpleTex->displacement, simpleTex->normal);
+//    TessOglMesh simplifiedOglMesh {oglMesh, simpleTex, {1, 1, 1, 1}};
+//    tessOglMeshes.push_back(simplifiedOglMesh);
+//    IO::WriteTexture(simpleTex->normal, simpleTex->width, simpleTex->height, 0.0, 0, dataDir / "out" / "simple_nrm.tiff");
 
-    int tessLevelIndex = 0;
-    for (auto& tessMesh : allTessMeshes) {
-        auto tessTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
-        Prepare::createTextures(sm, tessMesh, tessTex->width, tessTex->height, tessTex->displacement, tessTex->normal);
-        TessOglMesh tessOglMesh {oglMesh, tessTex, tessLevels.at(tessLevelIndex)};
-        tessOglMeshes.push_back(tessOglMesh);
-        if (EXPORT_TEXTURE) {
-            auto texstr = std::to_string(tessLevelIndex) + "_tex.tiff";
-            auto nrmstr = std::to_string(tessLevelIndex) + "_nrm.tiff";
-            IO::WriteTexture(tessTex->displacement, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / texstr);
-            IO::WriteTexture(tessTex->normal, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / nrmstr);
-        }
+//    int tessLevelIndex = 0;
+//    for (auto& tessMesh : allTessMeshes) {
+//        auto tessTex = std::make_shared<TessTexture>(TessTexture{1024, 1024, {}, {}});
+//        Prepare::createTextures(sm, tessMesh, tessTex->width, tessTex->height, tessTex->displacement, tessTex->normal);
+//        TessOglMesh tessOglMesh {oglMesh, tessTex, tessLevels.at(tessLevelIndex)};
+//        tessOglMeshes.push_back(tessOglMesh);
+//        if (EXPORT_TEXTURE) {
+//            auto texstr = std::to_string(tessLevelIndex) + "_tex.tiff";
+//            auto nrmstr = std::to_string(tessLevelIndex) + "_nrm.tiff";
+//            IO::WriteTexture(tessTex->displacement, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / texstr);
+//            IO::WriteTexture(tessTex->normal, tessTex->width, tessTex->height, 0.0, 0, dataDir / "out" / nrmstr);
+//        }
+//
+//        tessLevelIndex++;
+//    }
 
-        tessLevelIndex++;
-    }
-
-    Prepare::OGLData highResModelData = Prepare::toOGL(*highResMesh);
+    Prepare::OGLData highResModelData = Prepare::toOGL(highResMesh);
     auto highResOglMesh = new OGLMesh(highResModelData);
 
 
