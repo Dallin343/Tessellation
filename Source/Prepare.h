@@ -32,7 +32,7 @@ namespace Prepare {
         std::vector<FaceData> faces;
     };
 
-    OGLData toOGL(const SurfaceMesh& sm);
+    OGLData toOGL(const SurfaceMesh& sm, bool test=false);
 
     void createTextures(const SurfaceMeshPtr& sm, const TessLevelData& data, int& w, int& h,
                         std::vector<glm::vec3>& displaceTex, std::vector<glm::vec3>& normalTex);

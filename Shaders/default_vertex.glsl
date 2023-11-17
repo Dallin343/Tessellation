@@ -16,8 +16,7 @@ out vec2 TexCoord;
 
 void main() {
     gl_Position = projection * view * model * vec4(position, 1.0);
-    vertexColor = vec4(_vertexColor, 1.0);
-    vertexColor = vec4(normal, 1.0);
+    vertexColor = vec4(0.4, 0.4, 0.4, 1.0);
     TexCoord = texCoords;
     Normal = normal;
     FragPos = vec3(model * vec4(position, 1.0));

@@ -17,9 +17,30 @@ include_directories(
         Vendor/spdlog/include
         Vendor/tclap/include
         Vendor/tiff/libtiff
+        Vendor/NvPerf/include
+        Vendor/NvPerf/include/linux-desktop-x64
+        Vendor/NvPerfUtility/include
         Source
 #        Source/FastDecimator
 )
+
+option(NVPERF "Enable Nsight Perf instrumentation" ON)
+IF(${NVPERF})
+    set(NVPERF_SDK_PATH Vendor/NvPerf/lib/x64)
+    find_package(NvPerf REQUIRED PATHS ./cmake)
+    find_package(NvPerfUtility REQUIRED PATHS ./cmake)
+
+    if(NvPerf_FOUND)
+        # Add NvPerf API
+        foreach(NvPerf_INCLUDE_DIR IN LISTS NvPerf_INCLUDE_DIRS)
+            file(GLOB FILES "${NvPerf_INCLUDE_DIR}/*.h")
+            list(APPEND NVPERF_FILES ${FILES})
+        endforeach()
+
+        # Add NvPerf Utility
+        file(GLOB NVPERF_UTILITY_FILES "${NvPerfUtility_INCLUDE_DIRS}/*.h")
+    endif()
+ENDIF()
 
 set(CGAL_DIR Vendor/CGAL)
 set(CGAL_DISABLE_GMP OFF)
@@ -86,7 +107,8 @@ add_executable(Tessellation
 #        Source/FastDecimator/Heap.h
 #        Source/FastDecimator/Mesh.h
 #        Source/FastDecimator/Mesh.cpp
-        Source/Mapping.cpp Source/Evaluation.cpp Source/Evaluation.h)
+        Source/Mapping.cpp Source/Evaluation.cpp Source/Evaluation.h
+        ${NVPERF_FILES} ${NVPERF_UTILITY_FILES})
 
 if(CGAL_Qt5_FOUND)
 target_link_libraries(Tessellation PRIVATE
@@ -99,6 +121,7 @@ target_link_libraries(Tessellation PRIVATE
         CGAL::CGAL_Core
         spdlog::spdlog
         TIFF::tiff
+        NvPerf-shared
 #        CGAL::CGAL_Basic_viewer
         )
 else()
@@ -112,6 +135,12 @@ else()
             CGAL::CGAL_Core
             spdlog::spdlog
             TIFF::tiff
+            NvPerf-shared
             #        CGAL::CGAL_Basic_viewer
             )
+endif()
+
+if(NvPerf_FOUND)
+    target_compile_definitions(Tessellation PRIVATE NV_PERF_ENABLE_INSTRUMENTATION)
+    DeployNvPerf(Tessellation NvPerf-shared)
 endif()

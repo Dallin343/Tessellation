@@ -45,7 +45,7 @@ namespace IO {
         vt.reserve(sm.number_of_vertices());
         vn.reserve(sm.number_of_vertices());
 
-        auto uvmap = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv").first;
+        auto [uvmap, hasUvMap] = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
         auto fNorms = sm.property_map<SM_face_descriptor, Vector>("f:normal").first;
         auto vSeamMap = sm.property_map<SM_vertex_descriptor, bool>("v:on_seam").first;
         auto eSeamMap = sm.property_map<SM_edge_descriptor, bool>("e:on_seam").first;
@@ -57,23 +57,23 @@ namespace IO {
             VDtoVIdx.insert({vert, v.size()});
             v.push_back(sm.point(vert));
 
-            std::unordered_map<Point_2, unsigned int> uvToIdx;
-            for (const auto& hd : halfedges_around_source(vert, sm)) {
-                vdPairsToHDVec.emplace_back(vert, sm.target(hd), hd);
-
-                auto uv = get(uvmap, hd);
-                if (uvToIdx.find(uv) != uvToIdx.end()) {
-                    //already processed this uv
-                    auto idx = uvToIdx.at(uv);
-                    HDtoVtIdx.insert({hd, idx});
-                } else {
-                    //newly processed uv
-                    auto idx = vt.size();
-                    HDtoVtIdx.insert({hd, idx});
-                    uvToIdx.insert({uv, idx});
-                    vt.push_back(uv);
-                }
-            }
+//            std::unordered_map<Point_2, unsigned int> uvToIdx;
+//            for (const auto& hd : halfedges_around_source(vert, sm)) {
+//                vdPairsToHDVec.emplace_back(vert, sm.target(hd), hd);
+//
+//                auto uv = get(uvmap, hd);
+//                if (uvToIdx.find(uv) != uvToIdx.end()) {
+//                    //already processed this uv
+//                    auto idx = uvToIdx.at(uv);
+//                    HDtoVtIdx.insert({hd, idx});
+//                } else {
+//                    //newly processed uv
+//                    auto idx = vt.size();
+//                    HDtoVtIdx.insert({hd, idx});
+//                    uvToIdx.insert({uv, idx});
+//                    vt.push_back(uv);
+//                }
+//            }
         }
 
         if (!outSeams.empty()) {
@@ -92,7 +92,7 @@ namespace IO {
 
             std::stringstream ss;
             for (auto hd : sm.halfedges_around_face(sm.halfedge(face))) {
-                ss << " " << VDtoVIdx.at(sm.source(hd)) + 1 << "/" << HDtoVtIdx.at(hd) + 1 << "/" << nrmIdx + 1;
+                ss << " " << VDtoVIdx.at(sm.source(hd)) + 1 << "//" << nrmIdx + 1;
             }
 
             f.push_back(ss.str());
@@ -104,11 +104,11 @@ namespace IO {
                 "v " << pos.x() << " " << pos.y() << " " << pos.z() << "\n";
         }
 
-        for (auto texCoord : vt) {
-            auto x = texCoord.x();
-            out << std::setprecision(std::numeric_limits<double>::max_digits10) <<
-                "vt " << texCoord.x() << " " << texCoord.y() << "\n";
-        }
+//        for (auto texCoord : vt) {
+//            auto x = texCoord.x();
+//            out << std::setprecision(std::numeric_limits<double>::max_digits10) <<
+//                "vt " << texCoord.x() << " " << texCoord.y() << "\n";
+//        }
 
 //    out << "vn 0.0 0.0 0.0\n";
         for (auto nrm : vn) {

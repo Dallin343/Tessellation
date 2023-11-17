@@ -7,7 +7,7 @@
 
 namespace Prepare {
     std::vector<std::tuple<TessVertPtr, glm::vec3>> testing;
-    OGLData toOGL(const SurfaceMesh& sm) {
+    OGLData toOGL(const SurfaceMesh& sm, bool test) {
         OGLData data;
         data.vertices.reserve(sm.number_of_vertices());
         data.faces.reserve(sm.number_of_faces());
@@ -22,41 +22,8 @@ namespace Prepare {
         auto [uvMap, hasUVMap] = sm.property_map<SM_halfedge_descriptor, Point_2>("h:uv");
 
         //Process vertices,
-        for (const SM_vertex_descriptor& vd : sm.vertices()) {
-            if (get(vSeamMap, vd)) {
-                std::vector<std::pair<Point_2, unsigned int>> uvs;
-                for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
-                    if (get(eSeamMap, sm.edge(hd))) {
-                        Point_2 uv = get(uvMap, hd);
-                        unsigned int idx = data.vertices.size();
-                        hdToVertIdx.insert({hd, idx});
-                        uvs.emplace_back(uv, idx);
-
-                        glm::vec3 pos = Utils::toGLM(sm.point(vd));
-                        glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
-                        glm::vec2 texCoords = Utils::toGLM(uv);
-
-                        glm::vec3 color = {0.4f, 0.4f, 0.4f};
-//                        if (hasColor) {
-//                            color = get(vColorMap, vd);
-//                        }
-                        data.vertices.emplace_back(pos, nrm, color, texCoords);
-                    }
-                }
-
-                for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
-                    if (!get(eSeamMap, sm.edge(hd))) {
-                        Point_2 uv = get(uvMap, hd);
-                        auto it = std::min_element(uvs.begin(), uvs.end(), [uv](auto a, auto b) {
-                            return CGAL::squared_distance(a.first, uv) < CGAL::squared_distance(b.first, uv);
-                        });
-
-                        unsigned int idx = (*it).second;
-                        hdToVertIdx.insert({hd, idx});
-                    }
-                }
-            }
-            else {
+        if (test) {
+            for (const SM_vertex_descriptor& vd : sm.vertices()) {
                 unsigned int idx = data.vertices.size();
                 bool first = true;
                 for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
@@ -66,20 +33,74 @@ namespace Prepare {
                         glm::vec3 pos = Utils::toGLM(sm.point(vd));
                         glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
                         glm::vec2 texCoords = {};
-                        if (hasUVMap) {
-                            Point_2 uv = get(uvMap, hd);
-                            texCoords = Utils::toGLM(uv);
-                        }
                         glm::vec3 color = {0.4f, 0.4f, 0.4f};
-//                        if (hasColor) {
-//                            color = get(vColorMap, vd);
-//                        }
                         data.vertices.emplace_back(pos, nrm, color, texCoords);
                     }
                     hdToVertIdx.insert({hd, idx});
                 }
             }
         }
+        else {
+                for (const SM_vertex_descriptor& vd : sm.vertices()) {
+                    if (get(vSeamMap, vd)) {
+                        std::vector<std::pair<Point_2, unsigned int>> uvs;
+                        for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
+                            if (get(eSeamMap, sm.edge(hd))) {
+                                Point_2 uv = get(uvMap, hd);
+                                unsigned int idx = data.vertices.size();
+                                hdToVertIdx.insert({hd, idx});
+                                uvs.emplace_back(uv, idx);
+
+                                glm::vec3 pos = Utils::toGLM(sm.point(vd));
+                                glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
+                                glm::vec2 texCoords = Utils::toGLM(uv);
+
+                                glm::vec3 color = {0.4f, 0.4f, 0.4f};
+//                        if (hasColor) {
+//                            color = get(vColorMap, vd);
+//                        }
+                                data.vertices.emplace_back(pos, nrm, color, texCoords);
+                            }
+                        }
+
+                        for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
+                            if (!get(eSeamMap, sm.edge(hd))) {
+                                Point_2 uv = get(uvMap, hd);
+                                auto it = std::min_element(uvs.begin(), uvs.end(), [uv](auto a, auto b) {
+                                    return CGAL::squared_distance(a.first, uv) < CGAL::squared_distance(b.first, uv);
+                                });
+
+                                unsigned int idx = (*it).second;
+                                hdToVertIdx.insert({hd, idx});
+                            }
+                        }
+                    }
+                    else {
+                        unsigned int idx = data.vertices.size();
+                        bool first = true;
+                        for (const SM_halfedge_descriptor& hd : halfedges_around_source(vd, sm)) {
+                            if (first) {
+                                first = false;
+
+                                glm::vec3 pos = Utils::toGLM(sm.point(vd));
+                                glm::vec3 nrm = Utils::toGLM(get(vNormMap, vd));
+                                glm::vec2 texCoords = {};
+                                if (hasUVMap) {
+                                    Point_2 uv = get(uvMap, hd);
+                                    texCoords = Utils::toGLM(uv);
+                                }
+                                glm::vec3 color = {0.4f, 0.4f, 0.4f};
+//                        if (hasColor) {
+//                            color = get(vColorMap, vd);
+//                        }
+                                data.vertices.emplace_back(pos, nrm, color, texCoords);
+                            }
+                            hdToVertIdx.insert({hd, idx});
+                        }
+                    }
+                }
+        }
+
 
         //Process faces
         for (const SM_face_descriptor& fd : sm.faces()) {
