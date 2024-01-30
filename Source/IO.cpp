@@ -4,6 +4,7 @@
 
 #include "IO.h"
 #include "lodepng.h"
+#include "Utils.h"
 #include <tiffio.h>
 #include <cstring>
 
@@ -266,9 +267,9 @@ namespace IO {
         surfaceMesh->add_property_map<SM_vertex_descriptor, bool>("v:on_seam", v_on_seam_default);
         surfaceMesh->add_property_map<SM_edge_descriptor, bool>("e:on_seam", e_on_seam_default);
 
-        auto edgeCostMap = surfaceMesh->add_property_map<SM_edge_descriptor, double>("e:collapse_cost", 0.0).first;
-        auto vertexQMap = surfaceMesh->add_property_map<SM_vertex_descriptor, SymmetricMatrix>("v:q", {}).first;
-        auto faceFeatures = surfaceMesh->add_property_map<SM_face_descriptor, std::unordered_set<FeaturePointPtr>>("f:features", {}).first;
+//        auto edgeCostMap = surfaceMesh->add_property_map<SM_edge_descriptor, double>("e:collapse_cost", 0.0).first;
+//        auto vertexQMap = surfaceMesh->add_property_map<SM_vertex_descriptor, SymmetricMatrix>("v:q", {}).first;
+//        auto faceFeatures = surfaceMesh->add_property_map<SM_face_descriptor, std::unordered_set<FeaturePointPtr>>("f:features", {}).first;
         auto fNorms = surfaceMesh->add_property_map<SM_face_descriptor, Vector>("f:normal", {0.0, 0.0, 0.0}).first;
         auto vNorms = surfaceMesh->add_property_map<SM_vertex_descriptor, Vector>("v:normal", {0.0, 0.0, 0.0}).first;
         CGAL::Polygon_mesh_processing::compute_normals(*surfaceMesh, vNorms, fNorms);
@@ -462,6 +463,22 @@ namespace IO {
 //        }
 //        out.flush();
 //        TIFFClose(tiff);
+    }
+
+    void MapDisplacements(TessLevelData& data, const std::string& objFilename) {
+        auto mesh = fromOBJ(objFilename, false, false);
+        auto vertexNormals = mesh->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
+
+        data.mesh = mesh;
+        for (auto [fd, face] : data.processedFaces) {
+            for (const auto& tessVert : face->tessVerts) {
+                auto vd = tessVert->vd;
+                auto newPos = mesh->point(vd);
+
+                tessVert->newCoords = Utils::toGLM(newPos);
+                tessVert->normal = Utils::toGLM(get(vertexNormals, vd));
+            }
+        }
     }
 }
 

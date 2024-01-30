@@ -187,11 +187,22 @@ namespace Strategy {
                         //TODO: FIX THIS!!! It'll be nasty
                         //Finds the given barycentric tessellated vert in the existing edges vector of tessVerts
 //                        double testBary = processFace->e12->v0->vd == processFace->vds.at(1) ? bary.y : bary.z;
-
-                        auto i = std::find_if(processFace->e12->tessVerts.begin(), processFace->e12->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return glm::all(glm::equal(a->otherBaryCoords, bary));
-                        });
-                        tessVert = *i;
+                        bool found = false;
+                        for (auto& searchTessVert : processFace->e12->tessVerts) {
+                            if (Utils::nearly_equal(searchTessVert->otherBaryCoords.x, bary.y)) {
+                                tessVert = searchTessVert;
+                                tessVert->otherBaryCoords = bary;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            int x = 0;
+                        }
+//                        auto i = std::find_if(processFace->e12->tessVerts.begin(), processFace->e12->tessVerts.end(), [&](const TessVertPtr& a) {
+//                            return glm::all(glm::equal(a->otherBaryCoords, bary));
+//                        });
+//                        tessVert = *i;
                     }
 
                 }
@@ -199,13 +210,13 @@ namespace Strategy {
                     // On p0 - p2 edge
                     if (!e02_exists) {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
-                        tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.x, 0.0, 0.0));
+                        tessVert = std::make_shared<TessellatedVert>(coord, bary);
                         tessVert->vd = vd;
 //                        if (e02_is_seam) {
 //                            //If edge is a seam, make this vertex on seam.
 //                            tessVert->isOnSeam = true;
 //                        }
-                        processFace->e02->tessVerts.push_back(tessVert);
+                        processFace->e02->push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(0));
                         auto b = get(vNorms, processFace->vds.at(2));
@@ -214,24 +225,35 @@ namespace Strategy {
                     } else {
                         //TODO: FIX THIS!!! It'll be nasty
 //                        double testBary = processFace->e02->v0->vd == processFace->vds.at(0) ? bary.x : bary.z;
-
-                        auto i = std::find_if(processFace->e02->tessVerts.begin(), processFace->e02->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return glm::all(glm::equal(a->otherBaryCoords, bary));
-                        });
-                        tessVert = *i;
+                        bool found = false;
+                        for (auto& searchTessVert : processFace->e02->tessVerts) {
+                            if (Utils::nearly_equal(searchTessVert->otherBaryCoords.x, bary.z)) {
+                                tessVert = searchTessVert;
+                                tessVert->otherBaryCoords = bary;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            int x = 0;
+                        }
+//                        auto i = std::find_if(processFace->e02->tessVerts.begin(), processFace->e02->tessVerts.end(), [&](const TessVertPtr& a) {
+//                            return glm::all(glm::equal(a->otherBaryCoords, bary));
+//                        });
+//                        tessVert = *i;
                     }
                 }
                 else if (bary.z == 0.0) {
                     // On p0 - p1 edge
                     if (!e01_exists) {
                         auto vd = sm.add_vertex({coord.x, coord.y, coord.z});
-                        tessVert = std::make_shared<TessellatedVert>(coord, glm::vec3(bary.x, 0.0, 0.0));
+                        tessVert = std::make_shared<TessellatedVert>(coord, bary);
                         tessVert->vd = vd;
 //                        if (e01_is_seam) {
 //                            //If edge is a seam, make this vertex on seam.
 //                            tessVert->isOnSeam = true;
 //                        }
-                        processFace->e01->tessVerts.push_back(tessVert);
+                        processFace->e01->push_back(tessVert);
 
                         auto a = get(vNorms, processFace->vds.at(0));
                         auto b = get(vNorms, processFace->vds.at(1));
@@ -240,11 +262,22 @@ namespace Strategy {
                     } else {
                         //TODO: FIX THIS!!! It'll be nasty
 //                        double testBary = processFace->e01->v0->vd == processFace->vds.at(0) ? bary.x : bary.y;
-
-                        auto i = std::find_if(processFace->e01->tessVerts.begin(), processFace->e01->tessVerts.end(), [&](const TessVertPtr& a) {
-                            return glm::all(glm::equal(a->otherBaryCoords, bary));
-                        });
-                        tessVert = *i;
+                        bool found = false;
+                        for (auto& searchTessVert : processFace->e01->tessVerts) {
+                            if (Utils::nearly_equal(searchTessVert->otherBaryCoords.x, bary.x)) {
+                                tessVert = searchTessVert;
+                                tessVert->otherBaryCoords = bary;
+                                found = true;
+                                break;
+                            }
+                        }
+                        if (!found) {
+                            int x = 0;
+                        }
+//                        auto i = std::find_if(processFace->e01->tessVerts.begin(), processFace->e01->tessVerts.end(), [&](const TessVertPtr& a) {
+//                            return glm::all(glm::equal(a->otherBaryCoords, bary));
+//                        });
+//                        tessVert = *i;
                     }
                 }
                 else {

@@ -11,6 +11,10 @@ namespace Prepare {
         OGLData data;
         data.vertices.reserve(sm->number_of_vertices());
         data.faces.reserve(sm->number_of_faces());
+        data.edgeVertexData = {};
+        data.cornerVertexData = {};
+        data.innerVertexData = {};
+        data.faceData = {};
 
         std::unordered_map<SM_vertex_descriptor, unsigned int> vdToIdx;
 
@@ -37,7 +41,7 @@ namespace Prepare {
     OGLData toOGL(std::vector<TessLevelData>& meshes) {
         auto sm = meshes.at(0).mesh;
         auto data = toOGL(sm);
-        MultiResStorage::assignAttributes(meshes, data.cornerVertexData, data.edgeVertexData, data.innerVertexData, data.faceData);
+        MultiResStorage::assignAttributes(meshes, data);
 
         return data;
     }

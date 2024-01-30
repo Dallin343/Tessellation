@@ -6,6 +6,11 @@
 #include <igl/gaussian_curvature.h>
 
 namespace Utils {
+    bool nearly_equal(float a, float b, float epsilon) {
+        if (a == b) return true;
+        return std::abs(a-b) < epsilon;
+    }
+
     glm::vec3 barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2) {
         glm::vec3 u = t1 - t0;
         glm::vec3 v = t2 - t0;
@@ -93,6 +98,7 @@ namespace Utils {
         return V / d;
     }
 
+    glm::vec4 toGLM4(Kernel::Vector_3 p) {return {p.x(), p.y(), p.z(), 1.0f};}
     glm::vec3 toGLM(Kernel::Vector_3 p) {return {p.x(), p.y(), p.z()};}
     glm::vec3 toGLM(Kernel::Point_3 p) {return {p.x(), p.y(), p.z()};}
     glm::vec2 toGLM(Point_2 p) { return {p.x(), p.y()}; }

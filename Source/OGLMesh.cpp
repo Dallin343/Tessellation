@@ -5,7 +5,7 @@
 #include "OGLMesh.h"
 #include <glad/glad.h>
 
-OGLMesh::OGLMesh(const Prepare::OGLData& meshData, bool multiRes): multiRes(multiRes) {
+OGLMesh::OGLMesh(const OGLData& meshData, bool multiRes): multiRes(multiRes) {
     this->vertices = meshData.vertices;
     if (multiRes) {
         for (const auto& v : this->vertices) {
@@ -60,7 +60,7 @@ void OGLMesh::setupMesh() {
         glBufferData(GL_ARRAY_BUFFER, vertexPositions.size() * sizeof(glm::vec3), &vertexPositions[0], GL_STATIC_DRAW);
     }
     else {
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Prepare::VertexData), &vertices[0], GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(VertexData), &vertices[0], GL_STATIC_DRAW);
     }
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
@@ -75,16 +75,22 @@ void OGLMesh::setupMesh() {
     else {
         // vertex positions
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
         // vertex normals
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Prepare::VertexData), (void*)offsetof(Prepare::VertexData, normal));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
     }
 
     glBindVertexArray(0);
 }
 
 void OGLMesh::draw(const Shader &shader, Type drawType) const {
+    if (multiRes) {
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, cornerBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, edgeBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, innerBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, faceBuffer);
+    }
     glBindVertexArray(VAO);
     if (drawType == Patches) {
         glDrawElements(GL_PATCHES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, nullptr);

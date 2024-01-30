@@ -17,7 +17,7 @@ public:
         Triangles
     };
 
-    OGLMesh(const Prepare::OGLData& meshData, bool multiRes = false);
+    OGLMesh(const OGLData& meshData, bool multiRes = false);
     void genMultiResBuffers();
     void setupMesh();
     void draw(const Shader& shader, Type drawType) const;
@@ -27,14 +27,14 @@ public:
 
     bool multiRes;
 
-    std::vector<Prepare::VertexData> vertices;
+    std::vector<VertexData> vertices;
     std::vector<glm::vec3> vertexPositions;
     std::vector<unsigned int> indices;
-    std::vector<Prepare::FaceData> faces;
-    MultiResStorage::VAttrs cornerVertexData;
-    MultiResStorage::VAttrs edgeVertexData;
-    MultiResStorage::VAttrs innerVertexData;
-    MultiResStorage::FIdxs faceData;
+    std::vector<FaceData> faces;
+    VAttrs cornerVertexData;
+    VAttrs edgeVertexData;
+    VAttrs innerVertexData;
+    FIdxs faceData;
 };
 
 

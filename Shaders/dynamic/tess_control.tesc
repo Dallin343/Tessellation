@@ -4,13 +4,14 @@
 // this value controls the size of the input and output arrays
 layout (vertices=3) out;
 
-uniform ivec4 tessellationLevels[4];
-uniform float tessellationLevelDistances[4];
+uniform ivec4 tessellationLevels[2];
+uniform float tessellationLevelDistances[2];
 
 uniform mat4 model;           // the model matrix
 uniform mat4 view;            // the view matrix
 
 out ivec2 TessLevel[];
+out ivec3 EdgeTessIndex[];
 patch out int faceID;
 
 int getTessellationLevelIndex(float distance) {
@@ -20,12 +21,12 @@ int getTessellationLevelIndex(float distance) {
     else if (distance >= tessellationLevelDistances[1]) {
         return 1;
     }
-    else if (distance >= tessellationLevelDistances[2]) {
-        return 2;
-    }
-    else if (distance >= tessellationLevelDistances[3]) {
-        return 3;
-    }
+//    else if (distance >= tessellationLevelDistances[2]) {
+//        return 2;
+//    }
+//    else if (distance >= tessellationLevelDistances[3]) {
+//        return 3;
+//    }
     return 3;
 }
 
@@ -34,7 +35,6 @@ void main()
     // ----------------------------------------------------------------------
     // pass attributes through
     gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
-    faceID = gl_PrimitiveID;
 
     vec4 eyeSpacePos = view * model * gl_in[gl_InvocationID].gl_Position;
 
@@ -42,12 +42,13 @@ void main()
 
     int tessLevelIndex = getTessellationLevelIndex(distance);
     TessLevel[gl_InvocationID] = ivec2(tessLevelIndex, 0);
+    EdgeTessIndex[gl_InvocationID] = ivec3(0,0,0);
 
     // ----------------------------------------------------------------------
     // invocation zero controls tessellation levels for the entire patch
     if (gl_InvocationID == 0)
     {
-
+        faceID = gl_PrimitiveID;
         // ----------------------------------------------------------------------
         // Step 2: transform each vertex into eye space
         vec4 eyeSpacePos0 = view * model * gl_in[0].gl_Position;
@@ -80,5 +81,6 @@ void main()
         gl_TessLevelInner[0] = tessellationLevels[innerIndex].w;
 
         TessLevel[gl_InvocationID] = ivec2(tessLevelIndex, innerIndex);
+        EdgeTessIndex[gl_InvocationID] = ivec3(tessLevelIndex2, tessLevelIndex0, tessLevelIndex1);
     }
 }

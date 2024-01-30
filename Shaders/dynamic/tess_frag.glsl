@@ -42,5 +42,6 @@ void main()
 
     color = vec4((ambient + diffuse + specular) * color.xyz, color.w);
 
-    FragColor = color;
+//    FragColor = color;
+    FragColor = vertexColor;
 }

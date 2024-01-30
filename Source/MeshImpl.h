@@ -43,6 +43,7 @@
 #include <glm/glm.hpp>
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/unordered_map.hpp>
+#include <cereal/types/unordered_set.hpp>
 #include <cereal/types/vector.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/array.hpp>
@@ -468,14 +469,18 @@ public:
     }
 
     void push_back(const TessVertPtr& tessVert) {
+        // Add temporary bary coordinates for the other direction.
+        // x gets set to the component of the bary coord for v1
         if (tessVert->baryCoords.x == 0.0f) {
-            tessVert->otherBaryCoords = {0.0f, tessVert->baryCoords.z, tessVert->baryCoords.y};
+//            tessVert->otherBaryCoords = {0.0f, tessVert->baryCoords.z, tessVert->baryCoords.y};
+            tessVert->otherBaryCoords = {tessVert->baryCoords.z, 0.0f, 0.0f};
         }
         else if (tessVert->baryCoords.y == 0.0f) {
-            tessVert->otherBaryCoords = {tessVert->baryCoords.z, 0.0f, tessVert->baryCoords.x};
+//            tessVert->otherBaryCoords = {tessVert->baryCoords.z, 0.0f, tessVert->baryCoords.x};
+            tessVert->otherBaryCoords = {tessVert->baryCoords.x, 0.0f, 0.0f};
         }
         else if (tessVert->baryCoords.z == 0.0f) {
-            tessVert->otherBaryCoords = {tessVert->baryCoords.y, tessVert->baryCoords.x, 0.0f};
+            tessVert->otherBaryCoords = {tessVert->baryCoords.y, 0.0f, 0.0f};
         }
         tessVert->edgeHd = hd;
         tessVerts.push_back(tessVert);
@@ -483,7 +488,7 @@ public:
 
     template<class Archive>
     void serialize(Archive& archive) {
-        archive(ed, v0, v1, tessVerts);
+        archive(hd, otherHd, ed, v0, v1, tessVerts, otherTessVerts);
     }
 };
 typedef std::shared_ptr<ProcessEdge> ProcessEdgePtr;
@@ -506,14 +511,15 @@ public:
     VDToTessVert vdToTessVert;
 
     std::vector<TessVertPtr> edgeVertices(const SM_halfedge_descriptor& hd) {
-        for (const auto& edge : {e01, e02, e01}) {
+        for (const auto& edge : {e01, e02, e12}) {
             if (edge->hd == hd) {
                 return edge->tessVerts;
             }
-            else if (edge->hd == hd) {
+            else if (edge->otherHd == hd) {
                 return edge->otherTessVerts;
             }
         }
+        return {};
     }
 
     template<class Archive>
@@ -542,6 +548,17 @@ struct TessLevel {
     bool isIdentity() const {
         return ol0 == 1 && ol1 == 1 && ol2 == 1 && il == 1;
     };
+
+    std::string str() const {
+        std::stringstream tessLevelStr;
+        tessLevelStr << ol0 << "-" << ol1 << "-" << ol2 << "-" << il;
+        return tessLevelStr.str();
+    }
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(ol0, ol1, ol2, il);
+    }
 };
 
 namespace glm {
@@ -562,6 +579,57 @@ struct TessLevelData {
     TessEdgeMap processedEdges;
     ProcessFaceMap processedFaces;
     VertSet interpolateVerts;
+
+    template<class Archive>
+    void serialize(Archive& archive) {
+        archive(level, processedEdges, processedFaces, interpolateVerts);
+    }
+};
+
+
+struct VertexAttributes {
+    glm::vec4 displacement;
+    glm::vec4 normal;
+    VertexAttributes(glm::vec3 d, glm::vec3 n): displacement(glm::vec4(d, 1.0f)), normal(glm::dvec4(n, 1.0f)) {}
+    VertexAttributes(): displacement(), normal() {}
+};
+
+struct FaceLookupIndices {
+    int firstCorner0, firstCorner1, firstCorner2;
+    int firstInner;
+    int firstEdge0, firstEdge1, firstEdge2;
+
+    FaceLookupIndices(const std::array<int,3>& corners, int inner, const std::array<int,3> edges) {
+        firstCorner0 = corners[0], firstCorner1 = corners[1], firstCorner2 = corners[2];
+        firstInner = inner;
+        firstEdge0 = edges[0], firstEdge1 = edges[1], firstEdge2 = edges[2];
+    }
+};
+
+typedef std::vector<VertexAttributes> VAttrs;
+typedef std::vector<FaceLookupIndices> FIdxs;
+
+struct VertexData {
+    VertexData(const glm::vec3 &pos) : pos(pos), normal() {}
+    VertexData(const glm::vec3 &pos, const glm::vec3& norm) : pos(pos), normal(norm) {}
+
+    glm::vec3 pos;
+    glm::vec3 normal;
+};
+
+struct FaceData {
+    FaceData(unsigned int v0, unsigned int v1, unsigned int v2) : v0(v0), v1(v1), v2(v2) {}
+
+    unsigned int v0, v1, v2;
+};
+
+struct OGLData {
+    std::vector<VertexData> vertices{};
+    std::vector<FaceData> faces{};
+    VAttrs cornerVertexData{};
+    VAttrs edgeVertexData{};
+    VAttrs innerVertexData{};
+    FIdxs faceData{};
 };
 
 #endif //TESSELLATION_MESHIMPL_H

@@ -32,6 +32,8 @@ namespace IO {
     SeamMeshPtr AddSeams(const SurfaceMeshPtr& sm, const std::string& selectionsFile);
     void AddSeamsFromFile(const SurfaceMeshPtr& mesh, const std::string& filename);
 
+    void MapDisplacements(TessLevelData& data, const std::string& objFilename);
+
     void WriteTexture(const std::vector<glm::vec3>& tex, unsigned int w, unsigned int h, float offsetVal, unsigned int max, const std::string& file);
 };
 

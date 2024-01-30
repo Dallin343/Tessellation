@@ -6,12 +6,6 @@
 #include "Utils.h"
 
 namespace MultiResStorage {
-
-    static bool nearly_equal(float a, float b,float epsilon = 1e-7) {
-        if (a == b) return true;
-        return std::abs(a-b) < epsilon;
-    }
-
     int calculateVertexIndex(glm::ivec4 tessLevels, glm::vec3 bary) {
         int innerLevel = tessLevels.w, outerLevel = tessLevels.x;
         auto alpha = bary.x, beta = bary.y, gamma = bary.z;
@@ -20,31 +14,31 @@ namespace MultiResStorage {
 
         int edge;
         float b_prime;
-        if (nearly_equal(b_min, alpha)) {
+        if (Utils::nearly_equal(b_min, alpha)) {
             // On edge 1 side of triangle between v1, v2
             edge = 1;
             b_prime = gamma;
-            if (nearly_equal(b_min, beta)) {
+            if (Utils::nearly_equal(b_min, beta)) {
                 //Gamma corner, we need to change edge to reflect that
                 edge = 2;
                 b_prime = alpha;
             }
         }
-        else if (nearly_equal(b_min, beta)) {
+        else if (Utils::nearly_equal(b_min, beta)) {
             // On edge 2 side of triangle between v2, v0
             edge = 2;
             b_prime = alpha;
-            if (nearly_equal(b_min, gamma)) {
+            if (Utils::nearly_equal(b_min, gamma)) {
                 //alpha corner
                 edge = 0;
                 b_prime = beta;
             }
         }
-        else if (nearly_equal(b_min, gamma)) {
+        else if (Utils::nearly_equal(b_min, gamma)) {
             // On edge 0 side of triangle between v0, v1
             edge = 0;
             b_prime = beta;
-            if (nearly_equal(b_min, beta)) {
+            if (Utils::nearly_equal(b_min, beta)) {
                 //beta corner
                 edge = 1;
                 b_prime = gamma;
@@ -68,7 +62,7 @@ namespace MultiResStorage {
             }
 
             // If all barycentric components are equal, this is the center/last inner vertex
-            if (nearly_equal(alpha, beta) && nearly_equal(beta, gamma)) {
+            if (Utils::nearly_equal(alpha, beta) && Utils::nearly_equal(beta, gamma)) {
                 relativeVertexIndex = ringRelativeStartIndex;
             }
             else {
@@ -86,9 +80,15 @@ namespace MultiResStorage {
         return relativeVertexIndex;
     }
 
-    void assignAttributes(std::vector<TessLevelData>& meshes, VAttrs& corner, VAttrs& edges, VAttrs& inner, FIdxs& faces) {
+    void assignAttributes(std::vector<TessLevelData>& meshes, OGLData& data) {
         std::unordered_map<SM_vertex_descriptor, int> assignedCorners{};
         std::unordered_map<SM_edge_descriptor, int> assignedEdges{};
+
+        int totalPositiveEdges = 0, totalNegativeEdges = 0;
+        auto& corner = data.cornerVertexData;
+        auto& inner = data.innerVertexData;
+        auto& edges = data.edgeVertexData;
+        auto& faces = data.faceData;
 
         auto baseMesh = meshes.at(0).mesh;
         auto baseVNorms = baseMesh->property_map<SM_vertex_descriptor, Vector>("v:normal").first;
@@ -109,7 +109,7 @@ namespace MultiResStorage {
 
                 for (auto tessLevel : meshes) {
                     if (tessLevel.level.isIdentity()) {
-                        corner.emplace_back(glm::vec3(0.0f, 0.0f, 0.0f), Utils::toGLM(get(baseVNorms, vd)));
+                        corner.emplace_back(glm::vec3(1.0f, 0.0f, 0.0f), Utils::toGLM(get(baseVNorms, vd)));
                         continue;
                     }
 
@@ -132,8 +132,8 @@ namespace MultiResStorage {
                 for (const auto& innerVert : tessFace->innerVerts) {
                     // Calculate the index for each inner vertex and order them in the vector
                     int relativeIndex = calculateVertexIndex(tessLevel.level.toGLM(), innerVert->baryCoords);
-                    faceVerticesInOrder.at(relativeIndex).displacement = innerVert->newCoords - innerVert->origCoords;
-                    faceVerticesInOrder.at(relativeIndex).normal = innerVert->normal;
+                    faceVerticesInOrder.at(relativeIndex).displacement = glm::vec4(innerVert->newCoords - innerVert->origCoords, 1.0f);
+                    faceVerticesInOrder.at(relativeIndex).normal = glm::vec4(innerVert->normal, 1.0f);
                 }
                 inner.insert(inner.end(), faceVerticesInOrder.begin(), faceVerticesInOrder.end());
             }
@@ -148,13 +148,14 @@ namespace MultiResStorage {
                     // This edge has already been ordered, so this face accesses it in reverse order so its CCW.
                     firstEdgeIndices.at(arrayIndex) = -assignedEdges.at(edge);
                     arrayIndex++;
+                    totalNegativeEdges++;
                     continue;
                 }
 
                 //New edge in the list
                 firstEdgeIndices.at(arrayIndex++) = edges.size();
                 assignedEdges.insert({edge, edges.size()});
-
+                totalPositiveEdges++;
                 // For this edge, we order its attributes for each tessLevel all together
                 for (auto tessLevel : meshes) {
                     if (tessLevel.level.isIdentity()) continue; //Skip the base simplified mesh
@@ -166,15 +167,17 @@ namespace MultiResStorage {
                     for (const auto& edgeVert : edgeVertices) {
                         // Calculate the index for each inner vertex and order them in the vector
                         int relativeIndex = calculateVertexIndex(tessLevel.level.toGLM(), edgeVert->baryCoords);
-                        edgeVerticesInOrder.at(relativeIndex).displacement = edgeVert->newCoords - edgeVert->origCoords;
-                        edgeVerticesInOrder.at(relativeIndex).normal = edgeVert->normal;
+                        edgeVerticesInOrder.at(relativeIndex).displacement = glm::vec4(edgeVert->newCoords - edgeVert->origCoords, 1.0f);
+                        edgeVerticesInOrder.at(relativeIndex).normal = glm::vec4(edgeVert->normal, 1.0f);
                     }
-                    edges.insert(inner.end(), edgeVerticesInOrder.begin(), edgeVerticesInOrder.end());
+                    edges.insert(edges.end(), edgeVerticesInOrder.begin(), edgeVerticesInOrder.end());
                 }
             }
 
             faces.emplace_back(firstCornerIndices, firstInnerIndex, firstEdgeIndices);
         }
+
+        std::cout << "POSITIVE: " << totalPositiveEdges << "\nNegative: " << totalNegativeEdges << std::endl;
     }
 }
 

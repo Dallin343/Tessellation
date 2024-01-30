@@ -10,6 +10,8 @@
 #include <optional>
 
 namespace Utils {
+    bool nearly_equal(float a, float b, float epsilon = 1e-7);
+
     glm::vec3 barycentric(glm::vec3 point, glm::vec3 t0, glm::vec3 t1, glm::vec3 t2);
     glm::vec3 barycentric(glm::vec2 p, glm::vec2 a, glm::vec2 b, glm::vec2 c);
     glm::vec3 align_barycentric(const BarycentricPoint& point, const SM_vertex_descriptor &alignVd);
@@ -25,6 +27,7 @@ namespace Utils {
     Vector lerp(const Vector& A, const Vector& B, const Vector&C, double tA, double tB, double tC);
     Vector normalize(const Vector& V);
 
+    glm::vec4 toGLM4(Kernel::Vector_3 p);
     glm::vec3 toGLM(Kernel::Vector_3 p);
     glm::vec3 toGLM(Kernel::Point_3 p);
     glm::vec2 toGLM(Point_2 p);
